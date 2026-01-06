@@ -1,5 +1,5 @@
 """
-Docstring for px4
+Contains PX4 and MavlinkInterface Classes
 """
 from signals import *
 from pymavlink import mavutil
