@@ -3,10 +3,41 @@ Docstring for vehicle
 """
 from signals import *
 from pydantic import BaseModel, Field, PrivateAttr, validate_call
-import threading
 import socket
-import time
 import struct
+
+class Message(BaseModel):
+    """
+    Docstring for data
+    """
+    data_string: list[float]
+
+    def __len__(self):
+        return len(self.data_string)
+
+    def __iter__(self):
+        return iter(self.data_string)
+    
+    def __iter__(self):
+        return iter(self.data_string)
+    
+    def __getitem__(self, index):
+        return self.data_string[index]
+    
+class Command(Message):
+    data_string: list[float] = Field(
+        default_factory=lambda: [0.0] * NUM_ACTUATORS,
+        min_length=NUM_ACTUATORS,
+        max_length=NUM_ACTUATORS
+    )
+
+# TODO generalize with these classes
+class Telemetry(Message):
+    data_string: list[float] = Field(
+        default_factory=lambda: [0.0] * NUM_PLANT_OUTPUTS,
+        min_length=NUM_PLANT_OUTPUTS,
+        max_length=NUM_PLANT_OUTPUTS
+    )
 
 class NetworkInterface(BaseModel):
     """
@@ -19,16 +50,16 @@ class NetworkInterface(BaseModel):
     _send_socket: any = PrivateAttr(default=None)
     _rec_socket: any = PrivateAttr(default=None)
 
-class UDPInterface(NetworkInterface, BaseModel):
+class UDPInterface(NetworkInterface):
     """
     Low-latency UDP interface for bidirectional plant model communication.
     
     Handles binary serialization of telemetry data using IEEE 754 
     double-precision floats.
     """
-    _HANDSHAKE: list[float] = [1015.0]
-     
-    def send(self, BUFFER: list[float]) -> bool:
+    _HANDSHAKE: Message = Message(data_string=[1015.0] + [0.0]*15)
+
+    def send(self, BUFFER: Message) -> bool:
         """
         Packs and transmits a list of floats as Little-Endian doubles.
 
@@ -46,7 +77,7 @@ class UDPInterface(NetworkInterface, BaseModel):
             print(f"UDP Send error: {e}")
             return False
 
-    def read(self, buffer_size: int, timeout_duration: float) -> list[float]:
+    def read(self, buffer_size: int, timeout_duration: float) -> Message:
         """
         Receives and unpacks a UDP packet into a list of floats.
 
@@ -63,7 +94,7 @@ class UDPInterface(NetworkInterface, BaseModel):
             # Determine count based on 8-byte double width
             num_doubles = len(rec_bytes) // 8
             unpacked_data = struct.unpack(f'<{num_doubles}d', rec_bytes)
-            return list(unpacked_data)
+            return Message(data_string=unpacked_data)
             
         except socket.timeout:
             return [float('nan')]
@@ -115,16 +146,80 @@ class UDPInterface(NetworkInterface, BaseModel):
         print("UDP:: Handshake Verified!")
         return True
 
-class Translator:
+class Translator: # TODO, improve wih iterator and hydration
     """
     Docstring for Translator
     """
-    def _pack_bytes(y):
+    @staticmethod
+    def pack(actuator_controls: HIL_ACTUATOR_CTL) -> Message:
+        return Message(data_string=actuator_controls.controls)
+
+    @staticmethod
+    def unpack(message: Message) -> tuple[STATES, DCM]:
         """
-        Docstring for _pack_bytes
+        Unpacks a flat list of floats into structured STATES and DCM objects,
+        skipping time_usec as it is not present in the raw data stream.
+        """
+        states: STATES = STATES()
+        dcm: DCM = DCM()
         
-        :param y: Description
-        """
+        # Calculate size based on your model definitions
+        num_states = STATES.get_num_states()
+        raw_data = message.data_string
+        
+        # Split raw data: States first, DCM follows
+        state_data = raw_data[:num_states]
+        dcm_data = raw_data[num_states:]
+
+        # --- Map EF_velo (Indices 0-2) ---
+        states.earth_frame_v.Vxe = state_data[0]
+        states.earth_frame_v.Vye = state_data[1]
+        states.earth_frame_v.Vze = state_data[2]
+
+        # --- Map EF_pos (Indices 3-5) ---
+        states.earth_frame_x.Xe = state_data[3]
+        states.earth_frame_x.Ye = state_data[4]
+        states.earth_frame_x.Ze = state_data[5]
+
+        # --- Map EF_acc (Indices 6-8) ---
+        states.earth_frame_a.Axe = state_data[6]
+        states.earth_frame_a.Aye = state_data[7]
+        states.earth_frame_a.Aze = state_data[8]
+
+        # --- Map EULER_ANGLES (Indices 9-11) ---
+        states.euler_angles.Phi   = state_data[9]
+        states.euler_angles.Theta = state_data[10]
+        states.euler_angles.Psi   = state_data[11]
+
+        # --- Map BF_velo (Indices 12-14) ---
+        states.body_frame_v.U = state_data[12]
+        states.body_frame_v.V = state_data[13]
+        states.body_frame_v.W = state_data[14]
+
+        # --- Map BF_ang_rate (Indices 15-17) ---
+        states.body_frame_w.p = state_data[15]
+        states.body_frame_w.q = state_data[16]
+        states.body_frame_w.r = state_data[17]
+
+        # --- Map BF_acc (Indices 18-20) ---
+        states.body_frame_a.U_dot = state_data[18]
+        states.body_frame_a.V_dot = state_data[19]
+        states.body_frame_a.W_dot = state_data[20]
+
+        # --- Map BF_ang_acc (Indices 21-23) ---
+        states.body_frame_al.p_dot = state_data[21]
+        states.body_frame_al.q_dot = state_data[22]
+        states.body_frame_al.r_dot = state_data[23]
+
+        # TODO, make the rest look like this, include it in the DCM and STATE classes
+        # --- Map DCM (Remaining Indices) ---
+        dcm_fields = list(DCM.model_fields.keys())
+        for i, val in enumerate(dcm_data):
+            if i < len(dcm_fields):
+                setattr(dcm, dcm_fields[i], val)
+
+        return states, dcm
+
         pass
 
 class Vehicle:

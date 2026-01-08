@@ -7,6 +7,7 @@ Provides porotocls used to connect Plant, PX4 and Bridge
 
 from enum import IntFlag, IntEnum
 from pydantic import BaseModel, Field
+from typing import ClassVar
 
 
 # Constants #
@@ -14,6 +15,10 @@ from pydantic import BaseModel, Field
 
 UINT16_MAX = 65535  # Maximum value for 16-bit unsigned integers
 UINT8_MAX = 255     # Maximum value for 8-bit unsigned integers
+
+# Implimentation specific constants, TODO: Make this more general
+NUM_ACTUATORS = 16
+NUM_PLANT_OUTPUTS = 33
 
 
 # Enums and FLags #
@@ -191,14 +196,34 @@ class HIL_ACTUATOR_CTL_FLAG(IntFlag):
 # MAVLINK Containers #
 
 
-class HIL_ACTUATOR_CTL(BaseModel):
+class MavWrapper(BaseModel):
+    def to_list(self) -> list[float]:
+        flat_list = []
+        
+        # Access model_fields from the Class (type(self)) 
+        # instead of the instance (self)
+        for field_name in type(self).model_fields:
+            value = getattr(self, field_name)
+            
+            if isinstance(value, list):
+                flat_list.extend([float(x) for x in value])
+            else:
+                flat_list.append(float(value))
+                
+        return flat_list
+
+class HIL_ACTUATOR_CTL(MavWrapper):
     """Actuator commands received from the flight controller."""
     time_usec: int = 0
-    controls: list[float] = Field(default_factory=lambda: [0.0] * 16, min_length=16, max_length=16)
+    controls: list[float] = Field(
+        default_factory=lambda: [0.0] * NUM_ACTUATORS, # TODO, find some way to get rid of these magic numbers
+        min_length=NUM_ACTUATORS, 
+        max_length=NUM_ACTUATORS
+    )
     mode: MAV_MODE_FLAG = MAV_MODE_FLAG.CUSTOM_MODE_ENABLED
     flags: HIL_ACTUATOR_CTL_FLAG = HIL_ACTUATOR_CTL_FLAG.LOCKSTEP
 
-class HIL_SENSOR(BaseModel):
+class HIL_SENSOR(MavWrapper):
     """
     IMU and environmental sensor data sent to the flight controller.
     
@@ -228,7 +253,7 @@ class HIL_SENSOR(BaseModel):
     temp: float = 0.0
     fields_updated: HIL_SENSOR_UPDATE_FLAG = Field(default=HIL_SENSOR_UPDATE_FLAG.RESET)
 
-class HIL_GPS(BaseModel):
+class HIL_GPS(MavWrapper):
     """
     GPS telemetry sent to the flight controller.
     
@@ -258,7 +283,7 @@ class HIL_GPS(BaseModel):
     cog: int = UINT16_MAX
     satellites_visible: int = UINT8_MAX
 
-class HIL_RC_INPUTS(BaseModel):
+class HIL_RC_INPUTS(MavWrapper):
     """
     Simulated Radio Control (RC) inputs sent to the flight controller.
     
@@ -280,7 +305,7 @@ class HIL_RC_INPUTS(BaseModel):
     chan12_raw: int = 0 
     rssi: int = UINT8_MAX
 
-class HIL_STATE_QUAT(BaseModel):
+class HIL_STATE_QUAT(MavWrapper):
     """
     Complete simulated vehicle state in quaternion format.
     
@@ -308,7 +333,7 @@ class HIL_STATE_QUAT(BaseModel):
     yacc_mG: int = 0
     zacc_mG: int = 0
 
-class HIL_HEARTBEAT(BaseModel):
+class HIL_HEARTBEAT(MavWrapper):
     """
     Represents the MAVLink HEARTBEAT message (ID #0).
     The heartbeat message advertises a system's presence, type, and basic state.
@@ -321,7 +346,7 @@ class HIL_HEARTBEAT(BaseModel):
     system_status: MAV_STATE = MAV_STATE.MAV_STATE_UNINIT
     mavlink_version: int = 3 # default state
 
-class HIL_SYSTEM_TIME(BaseModel):
+class HIL_SYSTEM_TIME(MavWrapper):
     """
     Represents the MAVLink SYSTEM_TIME message (ID #2).
     Used to synchronize the system time between the simulator and the autopilot.
@@ -333,49 +358,59 @@ class HIL_SYSTEM_TIME(BaseModel):
 # Transformation/State Containers #
 
 
-class EF_acc(BaseModel):
+class State(BaseModel):
+    @classmethod
+    def get_num_members(cls) -> int:
+        return len(cls.model_fields)
+    
+    def to_list(self) -> list[float]:
+        return list(self.model_dump().values())
+    
+    # TODO, add from_list()
+
+class EF_acc(State):
     """Earth Frame Acceleration components (North-East-Down)."""
     Axe: float = 0.0
     Aye: float = 0.0
     Aze: float = 0.0
 
-class EF_velo(BaseModel):
+class EF_velo(State):
     """Earth Frame Velocity components (North-East-Down)."""
     Vxe: float = 0.0
     Vye: float = 0.0
     Vze: float = 0.0
 
-class EF_pos(BaseModel):
+class EF_pos(State):
     """Earth Frame Position coordinates (North-East-Down)."""
     Xe: float = 0.0
     Ye: float = 0.0
     Ze: float = 0.0
 
-class EULER_ANGLES(BaseModel):
+class EULER_ANGLES(State):
     """Vehicle Attitude in Euler Angles (Roll, Pitch, Yaw)."""
     Phi: float = 0.0
     Theta: float = 0.0
     Psi: float = 0.0
 
-class BF_velo(BaseModel):
+class BF_velo(State):
     """Body Frame Velocity (Forward, Right, Down)."""
     U: float = 0.0
     V: float = 0.0
     W: float = 0.0
 
-class BF_ang_rate(BaseModel):
+class BF_ang_rate(State):
     """Body Frame Angular Rates (p, q, r)."""
     p: float = 0.0
     q: float = 0.0
     r: float = 0.0
 
-class BF_acc(BaseModel):
+class BF_acc(State):
     """Body Frame Linear Accelerations."""
     U_dot: float = 0.0
     V_dot: float = 0.0
     W_dot: float = 0.0
 
-class BF_ang_acc(BaseModel):
+class BF_ang_acc(State):
     """Body Frame Angular Accelerations."""
     p_dot: float = 0.0
     q_dot: float = 0.0
@@ -390,7 +425,20 @@ class STATES(BaseModel):
     euler_angles: EULER_ANGLES = Field(default_factory=EULER_ANGLES)
     body_frame_v: BF_velo = Field(default_factory=BF_velo)
     body_frame_w: BF_ang_rate = Field(default_factory=BF_ang_rate)
+    body_frame_a: BF_acc = Field(default_factory=BF_acc)
     body_frame_al: BF_ang_acc = Field(default_factory=BF_ang_acc)
+
+    @classmethod
+    def get_num_states(cls) -> int:
+        total_count = 0
+        # model_fields.values() gives us the FieldInfo objects
+        for field_info in cls.model_fields.values():
+            field_type = field_info.annotation
+            if hasattr(field_type, 'get_num_members'):
+                total_count += field_type.get_num_members()
+        return total_count
+    
+    # TODO, add from_list()
 
 class DCM(BaseModel):
     """Direction Cosine Matrix for frame transformations."""
@@ -399,8 +447,13 @@ class DCM(BaseModel):
             [1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
             [0.0, 0.0, 1.0]
-        ]
+        ]        
     )
+    @classmethod
+    def get_num_members(cls) -> int:
+        return 9 # TODO find number of DCM members
+    
+    # TODO, add from_list()
 
 
 # Communication Envelopes #
@@ -415,6 +468,7 @@ class HIL_SEND(BaseModel):
     flag: HIL_SEND_UPDATE_FLAG = HIL_SEND_UPDATE_FLAG.NONE
     heartbeat: HIL_HEARTBEAT = Field(default_factory=HIL_HEARTBEAT)
     time: HIL_SYSTEM_TIME = Field(default_factory=HIL_SYSTEM_TIME)
+    # TODO, add from_list(), maybe not because each member sent at different time...
 
 
 class HIL_REC(BaseModel):
@@ -422,3 +476,4 @@ class HIL_REC(BaseModel):
     actuator_controls: HIL_ACTUATOR_CTL = Field(default_factory=HIL_ACTUATOR_CTL)
     heartbeat: HIL_HEARTBEAT = Field(default_factory=HIL_HEARTBEAT)
     time: HIL_SYSTEM_TIME = Field(default_factory=HIL_SYSTEM_TIME)
+    # TODO, add from_list()
