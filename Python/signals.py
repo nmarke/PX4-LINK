@@ -470,6 +470,11 @@ class VEHICLE_POSITION(BaseModel):
     coordinates: VEHICLE_COORDINATES = Field(default_factory=VEHICLE_COORDINATES)
     altitude: VEHICLE_ALTITUDE = Field(default_factory=VEHICLE_ALTITUDE)
 
+class VEHICLE_ENVIORNMENT(BaseModel):
+    pressure_inHg: float = 0.0
+    temp_C: float = 0.0
+
+
 # Communication Envelopes # 
 
 
@@ -484,7 +489,6 @@ class HIL_SEND(BaseModel):
     time: HIL_SYSTEM_TIME = Field(default_factory=HIL_SYSTEM_TIME)
     # TODO, add from_list(), maybe not because each member sent at different time...
 
-
 class HIL_REC(BaseModel):
     """Inbound data packet received from PX4 sent to bridge."""
     actuator_controls: HIL_ACTUATOR_CTL = Field(default_factory=HIL_ACTUATOR_CTL)
@@ -497,3 +501,4 @@ class HIL_VEHICLE_STATE(BaseModel):
     states: STATES = Field(default_factory=STATES)
     dcm: DCM = Field(default_factory=DCM)
     pos: VEHICLE_POSITION = Field(default_factory=VEHICLE_POSITION)
+    env: VEHICLE_ENVIORNMENT = Field(default_factory=VEHICLE_ENVIORNMENT)

@@ -63,7 +63,8 @@ class UDPInterface(NetworkInterface):
     Handles binary serialization of telemetry data using IEEE 754 
     double-precision floats.
     """
-    _HANDSHAKE: Message = Message(data_string=[1015.0] + [0.0]*15)
+    _HANDSHAKE: Message = Message(data_string=[1015.0] + [0.0]*(NUM_ACTUATORS-1))
+    _ENDSEQUENCE: Message = Message(data_string=[67]*NUM_ACTUATORS)
 
     def send(self, BUFFER: Message) -> bool:
         """
@@ -155,6 +156,7 @@ class UDPInterface(NetworkInterface):
         return True
 
     def disconnect(self):
+        self.send(self._ENDSEQUENCE)
         self._send_socket.close()
         self._rec_socket.close()
 
@@ -179,56 +181,60 @@ class Translator: # TODO, improve wih iterator and hydration
         num_states = STATES.get_num_states()
         raw_data = message.data_string
         
-        # Split raw data: States first, DCM follows
-        state_data = raw_data[:num_states]
-        dcm_data = raw_data[num_states:]
+        # Check recieved data length, expect 33 #
+        if len(raw_data) == STATES.get_num_states() + DCM.get_num_members():
+            # Split raw data: States first, DCM follows
+            state_data = raw_data[:num_states]
+            dcm_data = raw_data[num_states:]
 
-        # --- Map EF_velo (Indices 0-2) ---
-        states.earth_frame_v.Vxe = state_data[0]
-        states.earth_frame_v.Vye = state_data[1]
-        states.earth_frame_v.Vze = state_data[2]
+            # --- Map EF_velo (Indices 0-2) ---
+            states.earth_frame_v.Vxe = state_data[0]
+            states.earth_frame_v.Vye = state_data[1]
+            states.earth_frame_v.Vze = state_data[2]
 
-        # --- Map EF_pos (Indices 3-5) ---
-        states.earth_frame_x.Xe = state_data[3]
-        states.earth_frame_x.Ye = state_data[4]
-        states.earth_frame_x.Ze = state_data[5]
+            # --- Map EF_pos (Indices 3-5) ---
+            states.earth_frame_x.Xe = state_data[3]
+            states.earth_frame_x.Ye = state_data[4]
+            states.earth_frame_x.Ze = state_data[5]
 
-        # --- Map EF_acc (Indices 6-8) ---
-        states.earth_frame_a.Axe = state_data[6]
-        states.earth_frame_a.Aye = state_data[7]
-        states.earth_frame_a.Aze = state_data[8]
+            # --- Map EF_acc (Indices 6-8) ---
+            states.earth_frame_a.Axe = state_data[6]
+            states.earth_frame_a.Aye = state_data[7]
+            states.earth_frame_a.Aze = state_data[8]
 
-        # --- Map EULER_ANGLES (Indices 9-11) ---
-        states.euler_angles.Phi   = state_data[9]
-        states.euler_angles.Theta = state_data[10]
-        states.euler_angles.Psi   = state_data[11]
+            # --- Map EULER_ANGLES (Indices 9-11) ---
+            states.euler_angles.Phi   = state_data[9]
+            states.euler_angles.Theta = state_data[10]
+            states.euler_angles.Psi   = state_data[11]
 
-        # --- Map BF_velo (Indices 12-14) ---
-        states.body_frame_v.U = state_data[12]
-        states.body_frame_v.V = state_data[13]
-        states.body_frame_v.W = state_data[14]
+            # --- Map BF_velo (Indices 12-14) ---
+            states.body_frame_v.U = state_data[12]
+            states.body_frame_v.V = state_data[13]
+            states.body_frame_v.W = state_data[14]
 
-        # --- Map BF_ang_rate (Indices 15-17) ---
-        states.body_frame_w.p = state_data[15]
-        states.body_frame_w.q = state_data[16]
-        states.body_frame_w.r = state_data[17]
+            # --- Map BF_ang_rate (Indices 15-17) ---
+            states.body_frame_w.p = state_data[15]
+            states.body_frame_w.q = state_data[16]
+            states.body_frame_w.r = state_data[17]
 
-        # --- Map BF_acc (Indices 18-20) ---
-        states.body_frame_a.U_dot = state_data[18]
-        states.body_frame_a.V_dot = state_data[19]
-        states.body_frame_a.W_dot = state_data[20]
+            # --- Map BF_acc (Indices 18-20) ---
+            states.body_frame_a.U_dot = state_data[18]
+            states.body_frame_a.V_dot = state_data[19]
+            states.body_frame_a.W_dot = state_data[20]
 
-        # --- Map BF_ang_acc (Indices 21-23) ---
-        states.body_frame_al.p_dot = state_data[21]
-        states.body_frame_al.q_dot = state_data[22]
-        states.body_frame_al.r_dot = state_data[23]
+            # --- Map BF_ang_acc (Indices 21-23) ---
+            states.body_frame_al.p_dot = state_data[21]
+            states.body_frame_al.q_dot = state_data[22]
+            states.body_frame_al.r_dot = state_data[23]
 
-        # TODO, make the rest look like this, include it in the DCM and STATE classes
-        # --- Map DCM (Remaining Indices) ---
-        dcm_fields = list(DCM.model_fields.keys())
-        for i, val in enumerate(dcm_data):
-            if i < len(dcm_fields):
-                setattr(dcm, dcm_fields[i], val)
+            # TODO, make the rest look like this, include it in the DCM and STATE classes
+            # --- Map DCM (Remaining Indices) ---
+            dcm_fields = list(DCM.model_fields.keys())
+            for i, val in enumerate(dcm_data):
+                if i < len(dcm_fields):
+                    setattr(dcm, dcm_fields[i], val)
+        else: # Incorrect data sent #
+            print(f"DEBUG:: Unexpected data recieved, {raw_data}")
 
         return states, dcm
 
@@ -287,7 +293,7 @@ class Plant:
         #     if raw_data:
         #         # ... rest of your unpack and lock logic ...
 
-    def start(self):
+    def start(self) -> bool:
         timeout_limit: int = 10
         self.connected = self.UDP.connect(timeout_limit)
 
@@ -298,6 +304,8 @@ class Plant:
             print("Plant: Update loop started.")
         else:
             print(f"DEBUG:: Plant failed to connect")
+
+        return self.connected
 
     def stop(self):
         self._stop_event.set()
@@ -327,19 +335,27 @@ class Vehicle:
         self.states: STATES = STATES()
         self.dcm: DCM = DCM()
         self.pos: VEHICLE_POSITION = VEHICLE_POSITION()
+        self.env: VEHICLE_ENVIORNMENT = VEHICLE_ENVIORNMENT()
 
         # set vehicle specific variables #
         self._gps_status: GPS_FIX_TYPE = GPS_FIX_TYPE.FIX_3D
         self._start_lat_degE7 = 400740840
         self._start_lon_degE7 = -830776070
         self._start_alt_mm = 267000
+        self._start_temp_degC = 6
+        self._start_pressure_inHg = 30
 
         self.pos.altitude.alt_mm = self._start_alt_mm
         self.pos.coordinates.lat_degE7 = self._start_lat_degE7
         self.pos.coordinates.lon_degE7 = self._start_lon_degE7
+        self.env.temp_C = self._start_temp_degC
+        self.env.pressure_inHg = self._start_pressure_inHg
 
-        # start plant model #
-        self.plant.start()
+    def vehicle_start(self):
+        return self.plant.start()
+
+    def vehicle_stop(self):
+        self.plant.stop()
 
     def _update_position(self):
         ns_delta = self.states.earth_frame_x.Xe
@@ -358,22 +374,35 @@ class Vehicle:
         self.pos.coordinates.lat_degE7 = int(point.latitude * 1e7)
         self.pos.coordinates.lon_degE7 = int(point.longitude * 1e7)
 
+    def _update_altitude(self):
+        # update altitude, Ze (m) altitude (mm)
+        self.pos.altitude += self.states.earth_frame_x.Ze * 1e3
+
+    def _update_enviornment(self):
+        pass
+
     def get_vehicle_state(self, send: HIL_ACTUATOR_CTL) -> HIL_VEHICLE_STATE:
         self.states, self.dcm = self.plant.get_data(send)
 
         self._update_position()
 
+        self._update_altitude()
+
+        self._update_enviornment()
+
         return HIL_VEHICLE_STATE(
             self.states,
             self.dcm,
-            self.pos
+            self.pos,
+            self.env
         )
 
 # main, for testing #
 def main():
-    plant = Plant()
+    vehicle = Vehicle()
 
-    plant.start()
+    if vehicle.vehicle_start():
+        vehicle.vehicle_stop()
 
 if __name__ == "__main__":
     main()
