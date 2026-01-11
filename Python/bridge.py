@@ -5,30 +5,6 @@ Docstring for bridge
 from signals import *
 from pydantic import BaseModel, Field
 
-class Sensor(BaseModel):
-    data: list[float]
-
-    def read(self):
-        return self.data
-
-class Magnatometer(Sensor):
-    data = [0.0] * 3
-
-    def update(self, states: STATES):
-        pass
-
-class Accelerometer(Sensor):
-    pass
-
-class Gyro(Sensor):
-    pass
-
-class Barometer(Sensor):
-    pass
-
-class Thermometer(Sensor):
-    pass
-
 class Converter:
     """
     Docstring for Converter

@@ -11,7 +11,7 @@ import utm
 import geopy.distance
 import math
 
-class Message(BaseModel):
+class Packet(BaseModel):
     """
     Docstring for data
     """
@@ -23,14 +23,11 @@ class Message(BaseModel):
     def __iter__(self):
         return iter(self.data_string)
     
-    def __iter__(self):
-        return iter(self.data_string)
-    
     def __getitem__(self, index):
         return self.data_string[index]
 
 # TODO generalize with these classes 
-class Command(Message):
+class Command(Packet):
     data_string: list[float] = Field(
         default_factory=lambda: [0.0] * NUM_ACTUATORS,
         min_length=NUM_ACTUATORS,
@@ -38,7 +35,7 @@ class Command(Message):
     )
 
 # TODO generalize with these classes
-class Telemetry(Message):
+class Telemetry(Packet):
     data_string: list[float] = Field(
         default_factory=lambda: [0.0] * NUM_PLANT_OUTPUTS,
         min_length=NUM_PLANT_OUTPUTS,
@@ -63,10 +60,10 @@ class UDPInterface(NetworkInterface):
     Handles binary serialization of telemetry data using IEEE 754 
     double-precision floats.
     """
-    _HANDSHAKE: Message = Message(data_string=[1015.0] + [0.0]*(NUM_ACTUATORS-1))
-    _ENDSEQUENCE: Message = Message(data_string=[67]*NUM_ACTUATORS)
+    _HANDSHAKE: Packet = Packet(data_string=[1015.0] + [0.0]*(NUM_ACTUATORS-1))
+    _ENDSEQUENCE: Packet = Packet(data_string=[67]*NUM_ACTUATORS)
 
-    def send(self, BUFFER: Message) -> bool:
+    def send(self, BUFFER: Packet) -> bool:
         """
         Packs and transmits a list of floats as Little-Endian doubles.
 
@@ -84,7 +81,7 @@ class UDPInterface(NetworkInterface):
             print(f"UDP Send error: {e}")
             return False
 
-    def read(self, buffer_size: int = 1024, timeout_duration: float = 2.0) -> Message:
+    def read(self, buffer_size: int = 1024, timeout_duration: float = 2.0) -> Packet:
         """
         Receives and unpacks a UDP packet into a list of floats.
 
@@ -101,7 +98,7 @@ class UDPInterface(NetworkInterface):
             # Determine count based on 8-byte double width
             num_doubles = len(rec_bytes) // 8
             unpacked_data = struct.unpack(f'<{num_doubles}d', rec_bytes)
-            return Message(data_string=unpacked_data)
+            return Packet(data_string=unpacked_data)
             
         except socket.timeout:
             return [float('nan')]
@@ -165,11 +162,11 @@ class Translator: # TODO, improve wih iterator and hydration
     Docstring for Translator
     """
     @staticmethod
-    def pack(actuator_controls: HIL_ACTUATOR_CTL) -> Message:
-        return Message(data_string=actuator_controls.controls)
+    def pack(actuator_controls: HIL_ACTUATOR_CTL) -> Packet:
+        return Packet(data_string=actuator_controls.controls)
 
     @staticmethod
-    def unpack(message: Message) -> tuple[STATES, DCM]:
+    def unpack(message: Packet) -> tuple[STATES, DCM]:
         """
         Unpacks a flat list of floats into structured STATES and DCM objects,
         skipping time_usec as it is not present in the raw data stream.
@@ -325,7 +322,6 @@ class Plant:
                 self.DCM
             )
 
-# TODO, maybe put sensors insde vehicle class...
 class Vehicle:
     """
     Docstring for Vehicle
@@ -337,21 +333,19 @@ class Vehicle:
         self.pos: VEHICLE_POSITION = VEHICLE_POSITION()
         self.env: VEHICLE_ENVIORNMENT = VEHICLE_ENVIORNMENT()
 
-        # set vehicle specific variables #
-        self._gps_status: GPS_FIX_TYPE = GPS_FIX_TYPE.FIX_3D
         self._start_lat_degE7 = 400740840
         self._start_lon_degE7 = -830776070
         self._start_alt_mm = 267000
         self._start_temp_degC = 6
         self._start_pressure_inHg = 30
 
+    def vehicle_start(self):
         self.pos.altitude.alt_mm = self._start_alt_mm
         self.pos.coordinates.lat_degE7 = self._start_lat_degE7
         self.pos.coordinates.lon_degE7 = self._start_lon_degE7
         self.env.temp_C = self._start_temp_degC
         self.env.pressure_inHg = self._start_pressure_inHg
 
-    def vehicle_start(self):
         return self.plant.start()
 
     def vehicle_stop(self):
@@ -397,6 +391,71 @@ class Vehicle:
             pos=self.pos,
             env=self.env
         )
+    
+class Sensor(BaseModel):
+    sensor_data: Packet
+
+    def read(self) -> Packet:
+        return self.sensor_data
+
+class Magnatometer(Sensor):
+    def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        self.sensor_data = [
+            # Somehow get magnetic field from vehicle state
+        ]
+
+class Accelerometer(Sensor):
+    def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        # Add noise here #
+        self.sensor_data = [
+            vehicle_data.states.body_frame_a.U_dot,
+            vehicle_data.states.body_frame_a.V_dot,
+            vehicle_data.states.body_frame_a.W_dot
+        ]
+
+class Gyro(Sensor):
+    def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        self.sensor_data = [
+            vehicle_data.states.body_frame_al.p_dot,
+            vehicle_data.states.body_frame_al.q_dot,
+            vehicle_data.states.body_frame_al.r_dot
+        ]
+
+class Barometer(Sensor):
+    def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        self.sensor_data = [
+            vehicle_data.env.pressure_inHg,
+            vehicle_data.pos.altitude.alt_mm / 1e3 # TODO, confrm SI units
+        ]
+
+class Temp(Sensor):
+    def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        self.sensor_data = [
+            vehicle_data.env.temp_C
+        ]
+
+class Airspeed(Sensor):
+    def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        airspeed = vehicle_data.states.body_frame_v
+        self.sensor_data = [
+            # TODO, use DCM to determine track and thus airspeed, then derive pressure difference
+        ]
+    
+class System:
+    """
+    Docstring for System
+    """
+    def __init__(self):
+        self.vehicle: Vehicle = Vehicle()
+        self.sensors: list[Sensor] = [
+            Magnatometer(),
+            Accelerometer(),
+            Gyro(),
+            Barometer(),
+            Temp(),
+            Airspeed()
+        ]
+
 
 # main, for testing #
 def main():
