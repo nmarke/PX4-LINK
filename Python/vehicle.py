@@ -2,14 +2,14 @@
 Docstring for vehicle
 """
 from signals import *
-from pydantic import BaseModel, Field, PrivateAttr, validate_call
+from units import *
+from pydantic import PrivateAttr, validate_call
 import socket
 import struct
 import threading
 import time
 import utm
 import geopy.distance
-import math
 
 class Packet(BaseModel):
     """
@@ -101,6 +101,7 @@ class UDPInterface(NetworkInterface):
             return Packet(data_string=unpacked_data)
             
         except socket.timeout:
+            print(f"UDP Timeout Error")
             return [float('nan')]
         except struct.error as e:
             print(f"UDP Packing error: {e}")
@@ -157,7 +158,7 @@ class UDPInterface(NetworkInterface):
         self._send_socket.close()
         self._rec_socket.close()
 
-class Translator: # TODO, improve wih iterator and hydration
+class Translator: # TODO, improve with iterator and hydration
     """
     Docstring for Translator
     """
@@ -231,7 +232,7 @@ class Translator: # TODO, improve wih iterator and hydration
                 if i < len(dcm_fields):
                     setattr(dcm, dcm_fields[i], val)
         else: # Incorrect data sent #
-            print(f"DEBUG:: Unexpected data recieved, {raw_data}")
+            print(f"DEBUG:: Unexpected data recieved, {raw_data} of length: {len(raw_data)}")
 
         return states, dcm
 
@@ -339,7 +340,7 @@ class Vehicle:
         self._start_temp_degC = 6
         self._start_pressure_inHg = 30
 
-    def vehicle_start(self):
+    def vehicle_start(self) -> bool:
         self.pos.altitude.alt_mm = self._start_alt_mm
         self.pos.coordinates.lat_degE7 = self._start_lat_degE7
         self.pos.coordinates.lon_degE7 = self._start_lon_degE7
@@ -394,57 +395,155 @@ class Vehicle:
     
 class Sensor(BaseModel):
     sensor_data: Packet
+    updated: HIL_SENSOR_UPDATE_FLAG = HIL_SENSOR_UPDATE_FLAG.RESET
+
+    def update(self, state: HIL_VEHICLE_STATE) -> HIL_SENSOR_UPDATE_FLAG:
+        """
+        Base update method. 
+        Subclasses should override this with specific logic.
+        """
+        pass
 
     def read(self) -> Packet:
         return self.sensor_data
 
 class Magnatometer(Sensor):
+    @property
+    def x(self): return self.sensor_data[0]
+    @property
+    def y(self): return self.sensor_data[1]
+    @property
+    def z(self): return self.sensor_data[2]
+
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
-        self.sensor_data = [
+        self.updated = 0
+        self.new_data = [
             # Somehow get magnetic field from vehicle state
         ]
+        if self.sensor_data[self.x] == self.new_data[self.x]:
+            updated += HIL_SENSOR_UPDATE_FLAG.XMAG
+        if self.sensor_data[self.y] == self.new_data[self.y]:
+            updated += HIL_SENSOR_UPDATE_FLAG.YMAG
+        if self.sensor_data[self.z] == self.new_data[self.z]:
+            updated += HIL_SENSOR_UPDATE_FLAG.ZMAG
+
+        self.sensor_data = self.new_data
+        
+        return updated
 
 class Accelerometer(Sensor):
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         # Add noise here #
-        self.sensor_data = [
+        self.new_data = [
             vehicle_data.states.body_frame_a.U_dot,
             vehicle_data.states.body_frame_a.V_dot,
             vehicle_data.states.body_frame_a.W_dot
         ]
+        if self.sensor_data != self.new_data:
+            self.sensor_data = self.new_data
+            return True
+        return False
+    @property
+    def x(self): return self.sensor_data[0]
+    @property
+    def y(self): return self.sensor_data[1]
+    @property
+    def z(self): return self.sensor_data[2]
 
 class Gyro(Sensor):
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
-        self.sensor_data = [
+        self.new_data = [
             vehicle_data.states.body_frame_al.p_dot,
             vehicle_data.states.body_frame_al.q_dot,
             vehicle_data.states.body_frame_al.r_dot
         ]
+        if self.sensor_data != self.new_data:
+            self.sensor_data = self.new_data
+            return True
+        return False
+    @property
+    def x(self): return self.sensor_data[0]
+    @property
+    def y(self): return self.sensor_data[1]
+    @property
+    def z(self): return self.sensor_data[2]
 
 class Barometer(Sensor):
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
-        self.sensor_data = [
+        self.new_data = [
             vehicle_data.env.pressure_inHg,
-            vehicle_data.pos.altitude.alt_mm / 1e3 # TODO, confrm SI units
-        ]
-
-class Temp(Sensor):
-    def update(self, vehicle_data: HIL_VEHICLE_STATE):
-        self.sensor_data = [
+            vehicle_data.pos.altitude.alt_mm / 1e3, # TODO, confrm SI units
             vehicle_data.env.temp_C
         ]
+        if self.sensor_data != self.new_data:
+            self.sensor_data = self.new_data
+            return True
+        return False
+    @property
+    def abs_pressure(self): return self.sensor_data[0]
+    @property
+    def pressure_alt(self): return self.sensor_data[1]
+    @property
+    def temp(self): return self.sensor_data[2]
 
 class Airspeed(Sensor):
+
+
+    @property
+    def diff_pressure(self): return self.sensor_data[0]
+
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         airspeed = vehicle_data.states.body_frame_v
-        self.sensor_data = [
+        self.new_data = [
             # TODO, use DCM to determine track and thus airspeed, then derive pressure difference
         ]
-    
+        if self.sensor_data != self.new_data:
+            self.sensor_data = self.new_data
+            return True
+        return False
+
+class Gps(BaseModel):
+    @property
+    def fix_type(self): return self.sensor_data[0]
+    @property
+    def lat(self): return self.sensor_data[1]
+    @property
+    def lon(self): return self.sensor_data[2]
+    @property
+    def alt(self): return self.sensor_data[3]
+    @property
+    def eph(self): return self.sensor_data[4]
+    @property
+    def epv(self): return self.sensor_data[5]
+    @property
+    def vel(self): return self.sensor_data[6]
+    @property
+    def vn(self): return self.sensor_data[7]
+    @property
+    def ve(self): return self.sensor_data[8]
+    @property
+    def vd(self): return self.sensor_data[9]
+    @property
+    def cog(self): return self.sensor_data[10]
+    @property
+    def sats_vis(self): return self.sensor_data[11]
+
+    def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        self.new_data = [
+            # TODO, write logic to assign gps values from states
+        ]
+
 class System:
     """
     Docstring for System
     """
+    class SENSORS(IntEnum):
+        MAG = 0
+        ACCEL = 1
+        GYRO = 2
+        BARO = 3
+        AIRSPD = 4
+
     def __init__(self):
         self.vehicle: Vehicle = Vehicle()
         self.sensors: list[Sensor] = [
@@ -452,9 +551,115 @@ class System:
             Accelerometer(),
             Gyro(),
             Barometer(),
-            Temp(),
             Airspeed()
         ]
+        self.gps = Gps()
+
+        self.flag: HIL_SENSOR_UPDATE_FLAG = HIL_SENSOR_UPDATE_FLAG.RESET
+        self.internal_time: HIL_SYSTEM_TIME = HIL_SYSTEM_TIME()
+        self.state: MAV_STATE = MAV_STATE.MAV_STATE_BOOT
+
+    def start(self) -> bool:
+        started = self.vehicle.vehicle_start()
+        if started:
+            self.state = MAV_STATE.MAV_STATE_STANDBY
+            self.flag = 0
+            self._start_time: int = int(time.time() * 1e-6)
+        else:
+            self.state = MAV_STATE.MAV_STATE_CRITICAL
+
+        return started
+
+    def stop(self):
+        self.state = MAV_STATE.MAV_STATE_POWEROFF
+        self.vehicle.vehicle_stop()
+        self.state = MAV_STATE.MAV_STATE_FLIGHT_TERMINATION
+    
+    def update(self, send: HIL_ACTUATOR_CTL):
+        """
+        Main update function, gets new data from vehicle, updates sensors
+        update time
+        
+        :param self: Description
+        """
+        # update time #
+        current_time = int(time.time * 1e-6)
+        self.internal_time.time_unix_usec = current_time
+        self.internal_time.time_boot_ms = current_time - self._start_time
+
+        # update plant #
+        state = self.vehicle.get_vehicle_state(send)
+
+        # update sensors #
+        for sensor in self.sensors:
+            flag += sensor.update(state)
+
+    def get_sensor(self) -> HIL_SENSOR:
+        """
+        returns updated sensor data in mavlnk format
+        
+        :param self: Description
+        :return: Description
+        :rtype: HIL_SENSOR
+        """
+        accel = self.sensors[self.SENSORS.ACCEL]
+        gyro = self.sensors[self.SENSORS.GYRO]
+        mag = self.sensors[self.SENSORS.MAG]
+        baro = self.sensors[self.SENSORS.BARO]
+        airspd = self.sensors[self.SENSORS.AIRSPD]
+
+        return HIL_SENSOR(
+            time_usec=self.internal_time.time_boot_ms,
+
+            xacc=accel.x,
+            yacc=accel.y,
+            zacc=accel.z,
+
+            xgyro=gyro.x,
+            ygyro=gyro.y,
+            zgyro=gyro.z,
+
+            xmag=mag.x,
+            ymag=mag.y,
+            zmag=mag.z,
+
+            abs_pressure=baro.abs_pressure,
+            diff_pressure=airspd.diff_pressure,
+            pressure_alt=baro.pressure_alt,
+            temp=baro.temp,
+
+            fields_updated=self.flag
+        )
+
+    def get_gps(self) -> HIL_GPS:
+        """
+        returns gps data in mavlink format
+        
+        :param self: Description
+        :return: Description
+        :rtype: HIL_GPS
+        """
+        pass
+
+    def get_quaternion(self) -> HIL_STATE_QUAT:
+        """
+        returns quaternion data in mavlink format
+        
+        :param self: Description
+        :return: Description
+        :rtype: HIL_STATE_QUAT
+        """
+        pass
+
+    def get_time(self) -> HIL_SYSTEM_TIME:
+        """
+        returns time data in mavlink format
+        
+        :param self: Description
+        :return: Description
+        :rtype: HIL_SYSTEM_TIME
+        """
+        pass
 
 
 # main, for testing #

@@ -7,7 +7,6 @@ Provides porotocls used to connect Plant, PX4 and Bridge
 
 from enum import IntFlag, IntEnum
 from pydantic import BaseModel, Field
-from typing import ClassVar
 
 
 # Constants #
