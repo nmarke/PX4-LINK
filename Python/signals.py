@@ -443,9 +443,9 @@ class DCM(BaseModel):
     """Direction Cosine Matrix for frame transformations."""
     matrix: list[list[float]] = Field(
         default_factory=lambda: [
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0]
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0]
         ]        
     )
     @classmethod

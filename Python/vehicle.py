@@ -394,6 +394,13 @@ class Vehicle:
         )
     
 class Sensor(BaseModel):
+    class Index(IntEnum):
+        """
+        Base index method for sensor data point members
+        Subclasses should override this with specific indexes.
+        """
+        pass
+
     sensor_data: Packet
     updated: HIL_SENSOR_UPDATE_FLAG = HIL_SENSOR_UPDATE_FLAG.RESET
 
@@ -408,6 +415,11 @@ class Sensor(BaseModel):
         return self.sensor_data
 
 class Magnatometer(Sensor):
+    class Index(IntEnum):
+        X = 0
+        Y = 1
+        Z = 2
+
     @property
     def x(self): return self.sensor_data[0]
     @property
@@ -417,90 +429,111 @@ class Magnatometer(Sensor):
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         self.updated = 0
-        self.new_data = [
+        new_data = [
             # Somehow get magnetic field from vehicle state
         ]
-        if self.sensor_data[self.x] == self.new_data[self.x]:
+        if self.sensor_data[self.Index.X] == new_data[self.Index.X]:
             updated += HIL_SENSOR_UPDATE_FLAG.XMAG
-        if self.sensor_data[self.y] == self.new_data[self.y]:
+        if self.sensor_data[self.Index.Y] == new_data[self.Index.Y]:
             updated += HIL_SENSOR_UPDATE_FLAG.YMAG
-        if self.sensor_data[self.z] == self.new_data[self.z]:
+        if self.sensor_data[self.Index.Z] == new_data[self.Index.Z]:
             updated += HIL_SENSOR_UPDATE_FLAG.ZMAG
 
-        self.sensor_data = self.new_data
+        self.sensor_data = new_data
         
         return updated
 
 class Accelerometer(Sensor):
+    @property
+    def x(self): return self.sensor_data[0]
+    @property
+    def y(self): return self.sensor_data[1]
+    @property
+    def z(self): return self.sensor_data[2]
+
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         # Add noise here #
-        self.new_data = [
+        new_data = [
             vehicle_data.states.body_frame_a.U_dot,
             vehicle_data.states.body_frame_a.V_dot,
             vehicle_data.states.body_frame_a.W_dot
         ]
-        if self.sensor_data != self.new_data:
-            self.sensor_data = self.new_data
-            return True
-        return False
-    @property
-    def x(self): return self.sensor_data[0]
-    @property
-    def y(self): return self.sensor_data[1]
-    @property
-    def z(self): return self.sensor_data[2]
+        if self.sensor_data[self.x] == new_data[self.x]:
+            updated += HIL_SENSOR_UPDATE_FLAG.XACC
+        if self.sensor_data[self.y] == new_data[self.y]:
+            updated += HIL_SENSOR_UPDATE_FLAG.YACC
+        if self.sensor_data[self.z] == new_data[self.z]:
+            updated += HIL_SENSOR_UPDATE_FLAG.ZACC
+
+        self.sensor_data = new_data
+        
+        return updated
 
 class Gyro(Sensor):
+    @property
+    def p(self): return self.sensor_data[0]
+    @property
+    def q(self): return self.sensor_data[1]
+    @property
+    def r(self): return self.sensor_data[2]
+
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
-        self.new_data = [
+        new_data = [
             vehicle_data.states.body_frame_al.p_dot,
             vehicle_data.states.body_frame_al.q_dot,
             vehicle_data.states.body_frame_al.r_dot
         ]
-        if self.sensor_data != self.new_data:
-            self.sensor_data = self.new_data
-            return True
-        return False
-    @property
-    def x(self): return self.sensor_data[0]
-    @property
-    def y(self): return self.sensor_data[1]
-    @property
-    def z(self): return self.sensor_data[2]
+        if self.sensor_data[self.p] == new_data[self.p]:
+            updated += HIL_SENSOR_UPDATE_FLAG.XGYRO
+        if self.sensor_data[self.q] == new_data[self.q]:
+            updated += HIL_SENSOR_UPDATE_FLAG.YGYRO
+        if self.sensor_data[self.r] == new_data[self.r]:
+            updated += HIL_SENSOR_UPDATE_FLAG.ZGYRO
+
+        self.sensor_data = new_data
+        
+        return updated
 
 class Barometer(Sensor):
+    @property
+    def abs_p(self): return self.sensor_data[0]
+    @property
+    def p_alt(self): return self.sensor_data[1]
+    @property
+    def temp(self): return self.sensor_data[2]
+
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
-        self.new_data = [
+        new_data = [
             vehicle_data.env.pressure_inHg,
             vehicle_data.pos.altitude.alt_mm / 1e3, # TODO, confrm SI units
             vehicle_data.env.temp_C
         ]
-        if self.sensor_data != self.new_data:
-            self.sensor_data = self.new_data
-            return True
-        return False
-    @property
-    def abs_pressure(self): return self.sensor_data[0]
-    @property
-    def pressure_alt(self): return self.sensor_data[1]
-    @property
-    def temp(self): return self.sensor_data[2]
+        if self.sensor_data[self.abs_p] == new_data[self.abs_p]:
+            updated += HIL_SENSOR_UPDATE_FLAG.ABS_PRESSURE
+        if self.sensor_data[self.p_alt] == new_data[self.p_alt]:
+            updated += HIL_SENSOR_UPDATE_FLAG.PRESSURE_ALT
+        if self.sensor_data[self.temp] == new_data[self.temp]:
+            updated += HIL_SENSOR_UPDATE_FLAG.TEMPERATURE
+
+        self.sensor_data = new_data
+        
+        return updated
 
 class Airspeed(Sensor):
-
-
     @property
-    def diff_pressure(self): return self.sensor_data[0]
+    def diff_p(self): return self.sensor_data[0]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         airspeed = vehicle_data.states.body_frame_v
-        self.new_data = [
+        new_data = [
             # TODO, use DCM to determine track and thus airspeed, then derive pressure difference
         ]
-        if self.sensor_data != self.new_data:
-            self.sensor_data = self.new_data
-            return True
-        return False
+        if self.sensor_data[self.diff_p] == new_data[self.diff_p]:
+            updated += HIL_SENSOR_UPDATE_FLAG.DIFF_PRESSURE
+
+        self.sensor_data = new_data
+        
+        return updated
 
 class Gps(BaseModel):
     @property
