@@ -394,7 +394,7 @@ class Vehicle:
         )
     
 class Sensor(BaseModel):
-    class Index(IntEnum):
+    class _Index(IntEnum):
         """
         Base index method for sensor data point members
         Subclasses should override this with specific indexes.
@@ -415,10 +415,8 @@ class Sensor(BaseModel):
         return self.sensor_data
 
 class Magnatometer(Sensor):
-    class Index(IntEnum):
-        X = 0
-        Y = 1
-        Z = 2
+    class _Index(IntEnum):
+        X, Y, Z = 0, 1, 2
 
     @property
     def x(self): return self.sensor_data[0]
@@ -428,15 +426,16 @@ class Magnatometer(Sensor):
     def z(self): return self.sensor_data[2]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        X, Y, Z = self._Index.X, self._Index.Y, self._Index.Z
         self.updated = 0
         new_data = [
             # Somehow get magnetic field from vehicle state
         ]
-        if self.sensor_data[self.Index.X] == new_data[self.Index.X]:
+        if self.sensor_data[X] != new_data[X]:
             updated += HIL_SENSOR_UPDATE_FLAG.XMAG
-        if self.sensor_data[self.Index.Y] == new_data[self.Index.Y]:
+        if self.sensor_data[Y] != new_data[Y]:
             updated += HIL_SENSOR_UPDATE_FLAG.YMAG
-        if self.sensor_data[self.Index.Z] == new_data[self.Index.Z]:
+        if self.sensor_data[Z] != new_data[Z]:
             updated += HIL_SENSOR_UPDATE_FLAG.ZMAG
 
         self.sensor_data = new_data
@@ -444,6 +443,9 @@ class Magnatometer(Sensor):
         return updated
 
 class Accelerometer(Sensor):
+    class _Index(IntEnum):
+        X, Y, Z = 0, 1, 2
+
     @property
     def x(self): return self.sensor_data[0]
     @property
@@ -452,17 +454,18 @@ class Accelerometer(Sensor):
     def z(self): return self.sensor_data[2]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        X, Y, Z = self._Index.X, self._Index.Y, self._Index.Z
         # Add noise here #
         new_data = [
             vehicle_data.states.body_frame_a.U_dot,
             vehicle_data.states.body_frame_a.V_dot,
             vehicle_data.states.body_frame_a.W_dot
         ]
-        if self.sensor_data[self.x] == new_data[self.x]:
+        if self.sensor_data[X] != new_data[X]:
             updated += HIL_SENSOR_UPDATE_FLAG.XACC
-        if self.sensor_data[self.y] == new_data[self.y]:
+        if self.sensor_data[Y] != new_data[Y]:
             updated += HIL_SENSOR_UPDATE_FLAG.YACC
-        if self.sensor_data[self.z] == new_data[self.z]:
+        if self.sensor_data[Z] != new_data[Z]:
             updated += HIL_SENSOR_UPDATE_FLAG.ZACC
 
         self.sensor_data = new_data
@@ -470,6 +473,9 @@ class Accelerometer(Sensor):
         return updated
 
 class Gyro(Sensor):
+    class _Index(IntEnum):
+        P, Q, R = 0, 1, 2
+
     @property
     def p(self): return self.sensor_data[0]
     @property
@@ -478,16 +484,17 @@ class Gyro(Sensor):
     def r(self): return self.sensor_data[2]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        P, Q, R = self._Index.P, self._Index.Q, self._Index.R
         new_data = [
             vehicle_data.states.body_frame_al.p_dot,
             vehicle_data.states.body_frame_al.q_dot,
             vehicle_data.states.body_frame_al.r_dot
         ]
-        if self.sensor_data[self.p] == new_data[self.p]:
+        if self.sensor_data[P] != new_data[P]:
             updated += HIL_SENSOR_UPDATE_FLAG.XGYRO
-        if self.sensor_data[self.q] == new_data[self.q]:
+        if self.sensor_data[Q] != new_data[Q]:
             updated += HIL_SENSOR_UPDATE_FLAG.YGYRO
-        if self.sensor_data[self.r] == new_data[self.r]:
+        if self.sensor_data[R] != new_data[R]:
             updated += HIL_SENSOR_UPDATE_FLAG.ZGYRO
 
         self.sensor_data = new_data
@@ -495,6 +502,9 @@ class Gyro(Sensor):
         return updated
 
 class Barometer(Sensor):
+    class _Index(IntEnum):
+        AP, ALT, T = 0, 1, 2
+
     @property
     def abs_p(self): return self.sensor_data[0]
     @property
@@ -503,16 +513,17 @@ class Barometer(Sensor):
     def temp(self): return self.sensor_data[2]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        AP, ALT, T = self._Index.AP, self._Index.ALT, self._Index.T
         new_data = [
             vehicle_data.env.pressure_inHg,
             vehicle_data.pos.altitude.alt_mm / 1e3, # TODO, confrm SI units
             vehicle_data.env.temp_C
         ]
-        if self.sensor_data[self.abs_p] == new_data[self.abs_p]:
+        if self.sensor_data[AP] != new_data[AP]:
             updated += HIL_SENSOR_UPDATE_FLAG.ABS_PRESSURE
-        if self.sensor_data[self.p_alt] == new_data[self.p_alt]:
+        if self.sensor_data[ALT] != new_data[ALT]:
             updated += HIL_SENSOR_UPDATE_FLAG.PRESSURE_ALT
-        if self.sensor_data[self.temp] == new_data[self.temp]:
+        if self.sensor_data[T] != new_data[T]:
             updated += HIL_SENSOR_UPDATE_FLAG.TEMPERATURE
 
         self.sensor_data = new_data
@@ -520,15 +531,19 @@ class Barometer(Sensor):
         return updated
 
 class Airspeed(Sensor):
+    class _Index(IntEnum):
+        AS = 0
+
     @property
     def diff_p(self): return self.sensor_data[0]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        AS = self._Index.AS
         airspeed = vehicle_data.states.body_frame_v
         new_data = [
             # TODO, use DCM to determine track and thus airspeed, then derive pressure difference
         ]
-        if self.sensor_data[self.diff_p] == new_data[self.diff_p]:
+        if self.sensor_data[AS] != new_data[AS]:
             updated += HIL_SENSOR_UPDATE_FLAG.DIFF_PRESSURE
 
         self.sensor_data = new_data
@@ -592,7 +607,7 @@ class System:
         self.internal_time: HIL_SYSTEM_TIME = HIL_SYSTEM_TIME()
         self.state: MAV_STATE = MAV_STATE.MAV_STATE_BOOT
 
-    def start(self) -> bool:
+    def start(self):
         started = self.vehicle.vehicle_start()
         if started:
             self.state = MAV_STATE.MAV_STATE_STANDBY
@@ -600,8 +615,6 @@ class System:
             self._start_time: int = int(time.time() * 1e-6)
         else:
             self.state = MAV_STATE.MAV_STATE_CRITICAL
-
-        return started
 
     def stop(self):
         self.state = MAV_STATE.MAV_STATE_POWEROFF
@@ -616,7 +629,7 @@ class System:
         :param self: Description
         """
         # update time #
-        current_time = int(time.time * 1e-6)
+        current_time = int(time.time * 1e6)
         self.internal_time.time_unix_usec = current_time
         self.internal_time.time_boot_ms = current_time - self._start_time
 
