@@ -392,19 +392,21 @@ class Vehicle:
             pos=self.pos,
             env=self.env
         )
-    
-class Sensor(BaseModel):
-    class _Index(IntEnum):
+
+class Converter(BaseModel):
+    """
+    Used to convert vehicle data into mavlink format
+    """
+    class Index(IntEnum):
         """
         Base index method for sensor data point members
         Subclasses should override this with specific indexes.
         """
         pass
 
-    sensor_data: Packet
-    updated: HIL_SENSOR_UPDATE_FLAG = HIL_SENSOR_UPDATE_FLAG.RESET
-
-    def update(self, state: HIL_VEHICLE_STATE) -> HIL_SENSOR_UPDATE_FLAG:
+    _data: Packet
+    
+    def update(self, state: HIL_VEHICLE_STATE):
         """
         Base update method. 
         Subclasses should override this with specific logic.
@@ -412,172 +414,259 @@ class Sensor(BaseModel):
         pass
 
     def read(self) -> Packet:
-        return self.sensor_data
+        return self.data
+
+class Sensor(Converter):
+    """
+    Subclass of converter used for HIL_SENSOR
+    """
+    _updated: HIL_SENSOR_UPDATE_FLAG = HIL_SENSOR_UPDATE_FLAG.RESET
+
+    # Override #
+    def update(self, state: HIL_VEHICLE_STATE) -> HIL_SENSOR_UPDATE_FLAG:
+        """
+        Base update method. 
+        Subclasses should override this with specific logic.
+        """
+        pass
 
 class Magnatometer(Sensor):
-    class _Index(IntEnum):
+    class Index(IntEnum):
         X, Y, Z = 0, 1, 2
 
     @property
-    def x(self): return self.sensor_data[0]
+    def x(self): return self.data[0]
     @property
-    def y(self): return self.sensor_data[1]
+    def y(self): return self.data[1]
     @property
-    def z(self): return self.sensor_data[2]
+    def z(self): return self.data[2]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
-        X, Y, Z = self._Index.X, self._Index.Y, self._Index.Z
+        X, Y, Z = self.Index.X, self.Index.Y, self.Index.Z
         self.updated = 0
         new_data = [
             # Somehow get magnetic field from vehicle state
         ]
-        if self.sensor_data[X] != new_data[X]:
+        if self.data[X] != new_data[X]:
             updated += HIL_SENSOR_UPDATE_FLAG.XMAG
-        if self.sensor_data[Y] != new_data[Y]:
+        if self.data[Y] != new_data[Y]:
             updated += HIL_SENSOR_UPDATE_FLAG.YMAG
-        if self.sensor_data[Z] != new_data[Z]:
+        if self.data[Z] != new_data[Z]:
             updated += HIL_SENSOR_UPDATE_FLAG.ZMAG
 
-        self.sensor_data = new_data
+        self.data = new_data
         
         return updated
 
 class Accelerometer(Sensor):
-    class _Index(IntEnum):
+    class Index(IntEnum):
         X, Y, Z = 0, 1, 2
 
     @property
-    def x(self): return self.sensor_data[0]
+    def x(self): return self.data[0]
     @property
-    def y(self): return self.sensor_data[1]
+    def y(self): return self.data[1]
     @property
-    def z(self): return self.sensor_data[2]
+    def z(self): return self.data[2]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
-        X, Y, Z = self._Index.X, self._Index.Y, self._Index.Z
+        X, Y, Z = self.Index.X, self.Index.Y, self.Index.Z
         # Add noise here #
         new_data = [
             vehicle_data.states.body_frame_a.U_dot,
             vehicle_data.states.body_frame_a.V_dot,
             vehicle_data.states.body_frame_a.W_dot
         ]
-        if self.sensor_data[X] != new_data[X]:
+        if self.data[X] != new_data[X]:
             updated += HIL_SENSOR_UPDATE_FLAG.XACC
-        if self.sensor_data[Y] != new_data[Y]:
+        if self.data[Y] != new_data[Y]:
             updated += HIL_SENSOR_UPDATE_FLAG.YACC
-        if self.sensor_data[Z] != new_data[Z]:
+        if self.data[Z] != new_data[Z]:
             updated += HIL_SENSOR_UPDATE_FLAG.ZACC
 
-        self.sensor_data = new_data
+        self.data = new_data
         
         return updated
 
 class Gyro(Sensor):
-    class _Index(IntEnum):
+    class Index(IntEnum):
         P, Q, R = 0, 1, 2
 
     @property
-    def p(self): return self.sensor_data[0]
+    def p(self): return self.data[0]
     @property
-    def q(self): return self.sensor_data[1]
+    def q(self): return self.data[1]
     @property
-    def r(self): return self.sensor_data[2]
+    def r(self): return self.data[2]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
-        P, Q, R = self._Index.P, self._Index.Q, self._Index.R
+        P, Q, R = self.Index.P, self.Index.Q, self.Index.R
         new_data = [
             vehicle_data.states.body_frame_al.p_dot,
             vehicle_data.states.body_frame_al.q_dot,
             vehicle_data.states.body_frame_al.r_dot
         ]
-        if self.sensor_data[P] != new_data[P]:
+        if self.data[P] != new_data[P]:
             updated += HIL_SENSOR_UPDATE_FLAG.XGYRO
-        if self.sensor_data[Q] != new_data[Q]:
+        if self.data[Q] != new_data[Q]:
             updated += HIL_SENSOR_UPDATE_FLAG.YGYRO
-        if self.sensor_data[R] != new_data[R]:
+        if self.data[R] != new_data[R]:
             updated += HIL_SENSOR_UPDATE_FLAG.ZGYRO
 
-        self.sensor_data = new_data
+        self.data = new_data
         
         return updated
 
 class Barometer(Sensor):
-    class _Index(IntEnum):
+    class Index(IntEnum):
         AP, ALT, T = 0, 1, 2
 
     @property
-    def abs_p(self): return self.sensor_data[0]
+    def abs_p(self): return self.data[0]
     @property
-    def p_alt(self): return self.sensor_data[1]
+    def p_alt(self): return self.data[1]
     @property
-    def temp(self): return self.sensor_data[2]
+    def temp(self): return self.data[2]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
-        AP, ALT, T = self._Index.AP, self._Index.ALT, self._Index.T
+        AP, ALT, T = self.Index.AP, self.Index.ALT, self.Index.T
         new_data = [
             vehicle_data.env.pressure_inHg,
             vehicle_data.pos.altitude.alt_mm / 1e3, # TODO, confrm SI units
             vehicle_data.env.temp_C
         ]
-        if self.sensor_data[AP] != new_data[AP]:
+        if self.data[AP] != new_data[AP]:
             updated += HIL_SENSOR_UPDATE_FLAG.ABS_PRESSURE
-        if self.sensor_data[ALT] != new_data[ALT]:
+        if self.data[ALT] != new_data[ALT]:
             updated += HIL_SENSOR_UPDATE_FLAG.PRESSURE_ALT
-        if self.sensor_data[T] != new_data[T]:
+        if self.data[T] != new_data[T]:
             updated += HIL_SENSOR_UPDATE_FLAG.TEMPERATURE
 
-        self.sensor_data = new_data
+        self.data = new_data
         
         return updated
 
 class Airspeed(Sensor):
-    class _Index(IntEnum):
+    class Index(IntEnum):
         AS = 0
 
     @property
-    def diff_p(self): return self.sensor_data[0]
+    def diff_p(self): return self.data[0]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
-        AS = self._Index.AS
+        AS = self.Index.AS
         airspeed = vehicle_data.states.body_frame_v
         new_data = [
             # TODO, use DCM to determine track and thus airspeed, then derive pressure difference
         ]
-        if self.sensor_data[AS] != new_data[AS]:
+        if self.data[AS] != new_data[AS]:
             updated += HIL_SENSOR_UPDATE_FLAG.DIFF_PRESSURE
 
-        self.sensor_data = new_data
+        self.data = new_data
         
         return updated
 
-class Gps(BaseModel):
+class Gps(Converter):
+    class Index(IntEnum):
+        FT = 0
+        LAT = 1
+        LON = 2
+        ALT = 3
+        EPH = 4
+        EPV = 5
+        VEL = 6
+        VN = 7
+        VE = 8
+        VD = 9
+        COG = 10
+        SV = 11
+
     @property
-    def fix_type(self): return self.sensor_data[0]
+    def fix_type(self): return self.data[0]
     @property
-    def lat(self): return self.sensor_data[1]
+    def lat(self): return self.data[1]
     @property
-    def lon(self): return self.sensor_data[2]
+    def lon(self): return self.data[2]
     @property
-    def alt(self): return self.sensor_data[3]
+    def alt(self): return self.data[3]
     @property
-    def eph(self): return self.sensor_data[4]
+    def eph(self): return self.data[4]
     @property
-    def epv(self): return self.sensor_data[5]
+    def epv(self): return self.data[5]
     @property
-    def vel(self): return self.sensor_data[6]
+    def vel(self): return self.data[6]
     @property
-    def vn(self): return self.sensor_data[7]
+    def vn(self): return self.data[7]
     @property
-    def ve(self): return self.sensor_data[8]
+    def ve(self): return self.data[8]
     @property
-    def vd(self): return self.sensor_data[9]
+    def vd(self): return self.data[9]
     @property
-    def cog(self): return self.sensor_data[10]
+    def cog(self): return self.data[10]
     @property
-    def sats_vis(self): return self.sensor_data[11]
+    def sats_vis(self): return self.data[11]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
-        self.new_data = [
+        self.data = [
+            # TODO, write logic to assign gps values from states
+        ]
+
+class Quaternion(Converter):
+    class Index(IntEnum):
+        QUAT = 0
+        RLSPD = 4
+        PTSPD = 5
+        YWSPD = 6
+        LAT = 7
+        LON = 8
+        ALT = 9
+        VX = 10
+        VY = 11
+        VZ = 12
+        INDAIRSPD = 13
+        TRUAIRSPD = 14
+        XACC = 15
+        YACC = 16
+        ZACC = 17
+
+    @property
+    def attitude_quaternion(self):
+        return [self.data[0],
+                self.data[1],
+                self.data[2],
+                self.data[3]]
+        pass
+    @property
+    def rollspeed(self): return self.data[4]
+    @property
+    def pitchspeed(self): return self.data[5]
+    @property
+    def yawspeed(self): return self.data[6]
+    @property
+    def lat(self): return self.data[7]
+    @property
+    def lon(self): return self.data[8]
+    @property
+    def alt(self): return self.data[9]
+    @property
+    def vx(self): return self.data[10]
+    @property
+    def vy(self): return self.data[11]
+    @property
+    def vz(self): return self.data[12]
+    @property
+    def ind_airspeed(self): return self.data[13]
+    @property
+    def tru_airspeed(self): return self.data[14]
+    @property
+    def xacc(self): return self.data[15]
+    @property
+    def yacc(self): return self.data[16]
+    @property
+    def zacc(self): return self.data[17]
+
+    def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        self.data = [
             # TODO, write logic to assign gps values from states
         ]
 
@@ -592,6 +681,10 @@ class System:
         BARO = 3
         AIRSPD = 4
 
+    class CONVERTERS(IntEnum):
+        GPS = 0
+        QUATERNION = 1
+
     def __init__(self):
         self.vehicle: Vehicle = Vehicle()
         self.sensors: list[Sensor] = [
@@ -601,14 +694,20 @@ class System:
             Barometer(),
             Airspeed()
         ]
-        self.gps = Gps()
+        self.converters: list[Converter] = [
+            Gps(),
+            Quaternion()
+        ]
 
         self.flag: HIL_SENSOR_UPDATE_FLAG = HIL_SENSOR_UPDATE_FLAG.RESET
         self.internal_time: HIL_SYSTEM_TIME = HIL_SYSTEM_TIME()
         self.state: MAV_STATE = MAV_STATE.MAV_STATE_BOOT
 
     def start(self):
+        # start vehicle #
         started = self.vehicle.vehicle_start()
+
+        # set state #
         if started:
             self.state = MAV_STATE.MAV_STATE_STANDBY
             self.flag = 0
@@ -621,7 +720,7 @@ class System:
         self.vehicle.vehicle_stop()
         self.state = MAV_STATE.MAV_STATE_FLIGHT_TERMINATION
     
-    def update(self, send: HIL_ACTUATOR_CTL):
+    def update(self, send: HIL_ACTUATOR_CTL) -> MAV_STATE:
         """
         Main update function, gets new data from vehicle, updates sensors
         update time
@@ -638,11 +737,18 @@ class System:
 
         # update sensors #
         for sensor in self.sensors:
-            flag += sensor.update(state)
+            self.flag += sensor.update(state)
+
+        # update components #
+        for converter in self.converters:
+            converter.update()
+
+        # return state #
+        return self.state
 
     def get_sensor(self) -> HIL_SENSOR:
         """
-        returns updated sensor data in mavlnk format
+        returns updated sensor data in mavlnk format from most recent update
         
         :param self: Description
         :return: Description
@@ -675,7 +781,7 @@ class System:
             temp=baro.temp,
 
             fields_updated=self.flag
-        )
+        ).model_copy()
 
     def get_gps(self) -> HIL_GPS:
         """
@@ -685,35 +791,86 @@ class System:
         :return: Description
         :rtype: HIL_GPS
         """
-        pass
+        gps = self.converters[self.CONVERTERS.GPS]
+
+        return HIL_GPS(
+            time_usec=self.internal_time.time_boot_ms,
+
+            fix_type=gps.fix_type,
+
+            lat_degE7=gps.lat,
+            lon_degE7=gps.lon,
+            alt_mm=gps.alt,
+
+            eph=gps.eph,
+            epv=gps.epv,
+
+            vel_cms=gps.vel,
+            vn_cms=gps.vn,
+            ve_cms=gps.ve,
+            vd_cms=gps.vd,
+
+            cog=gps.cog,
+            satellites_visible=gps.sats_vis
+        ).model_copy()
 
     def get_quaternion(self) -> HIL_STATE_QUAT:
         """
-        returns quaternion data in mavlink format
+        returns quaternion data in mavlink format from most recent update
         
         :param self: Description
         :return: Description
         :rtype: HIL_STATE_QUAT
         """
-        pass
+        quat = self.converters[self.CONVERTERS.QUATERNION]
+
+        return HIL_STATE_QUAT(
+            time_usec=self.internal_time.time_boot_ms,
+
+            attitude_quaternion=quat.attitude_quaternion,
+
+            rollspeed_rads=quat.rollspeed,
+            pitchspeed_rads=quat.pitchspeed,
+            yawspeed_rads=quat.yawspeed,
+
+            lat_degE7=quat.lat,
+            lon_degE7=quat.lon,
+            alt_mm=quat.alt,
+
+            vx_cms=quat.vx,
+            vy_cms=quat.vy,
+            vz_cms=quat.vz,
+
+            ind_airspeed_cms=quat.ind_airspeed,
+            true_airspeed_cms=quat.tru_airspeed,
+
+            xacc_mG=quat.xacc,
+            yacc_mG=quat.yacc,
+            zacc_mG=quat.zacc,
+        ).model_copy()
 
     def get_time(self) -> HIL_SYSTEM_TIME:
         """
-        returns time data in mavlink format
+        returns time data in mavlink format  from most recent update
         
         :param self: Description
         :return: Description
         :rtype: HIL_SYSTEM_TIME
         """
-        pass
+        return self.internal_time.model_copy()
 
 
 # main, for testing #
 def main():
-    vehicle = Vehicle()
+    system = System()
 
-    if vehicle.vehicle_start():
-        vehicle.vehicle_stop()
+    print(system.update)
+
+    system.start()
+
+    print(system.update)
+
+    system.stop()
 
 if __name__ == "__main__":
     main()

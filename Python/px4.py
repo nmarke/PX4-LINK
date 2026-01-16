@@ -70,6 +70,7 @@ class MavlinkInterface(BaseModel):
                              and the bitmask determining which fields to update.
         """
         if not send.flag:
+            print(f"DEBUG:: Issue with send flag, {send.flag}")
             return
 
         # --- HIL SENSOR UPDATE ---
@@ -163,9 +164,12 @@ class PX4:
     """
     High-level controller for PX4 Autopilot interaction.
     """
+    _TYPE: str = "tcpin"
+    _HOST: str = "0.0.0.0"
+    _PORT: int = 4564
     
     # Standard functions #
-    def __init__(self, connection_type: str, host: str, port: int):
+    def __init__(self, connection_type: str = _TYPE, host: str = _HOST, port: int = _PORT):
         """
         Initializes the PX4 controller and state containers.
 

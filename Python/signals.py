@@ -483,9 +483,9 @@ class HIL_SEND(BaseModel):
     gps: HIL_GPS = Field(default_factory=HIL_GPS)
     rc_inputs: HIL_RC_INPUTS = Field(default_factory=HIL_RC_INPUTS)
     quat: HIL_STATE_QUAT = Field(default_factory=HIL_STATE_QUAT)
-    flag: HIL_SEND_UPDATE_FLAG = HIL_SEND_UPDATE_FLAG.NONE
     heartbeat: HIL_HEARTBEAT = Field(default_factory=HIL_HEARTBEAT)
     time: HIL_SYSTEM_TIME = Field(default_factory=HIL_SYSTEM_TIME)
+    flag: HIL_SEND_UPDATE_FLAG = HIL_SEND_UPDATE_FLAG.NONE
     # TODO, add from_list(), maybe not because each member sent at different time...
 
 class HIL_REC(BaseModel):
