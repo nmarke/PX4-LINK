@@ -151,11 +151,11 @@ class MavlinkInterface(BaseModel):
         rec_type = msg.get_type()
 
         if rec_type == 'HIL_ACTUATOR_CONTROLS':
-            rec.actuators = HIL_ACTUATOR_CTL(**msg.to_dict())
+            rec.actuator_controls = HIL_ACTUATOR_CTL(**msg.to_dict())
         elif rec_type == 'HEARTBEAT':
             rec.heartbeat = HIL_HEARTBEAT(**msg.to_dict())
         elif rec_type == 'SYSTEM_TIME':
-            rec.system_time = HIL_SYSTEM_TIME(**msg.to_dict())
+            rec.time = HIL_SYSTEM_TIME(**msg.to_dict())
 
         return rec
 
@@ -205,12 +205,12 @@ class PX4:
 
             if new_data:
                 with self._lock:
-                    if new_data.actuators:
-                        self.state.actuators = new_data.actuators
+                    if new_data.actuator_controls:
+                        self.state.actuator_controls = new_data.actuator_controls
                     if new_data.heartbeat:
                         self.state.heartbeat = new_data.heartbeat
-                    if new_data.system_time:
-                        self.state.system_time = new_data.system_time
+                    if new_data.time:
+                        self.state.time = new_data.time
             else:
                 print(f"DEBUG:: Didn't recieve new data, returned {new_data}")
 
@@ -237,24 +237,29 @@ class PX4:
 
     # funcions used to send and recieve data from PX4 #
     @validate_call
-    def send_inputs(self, sent: HIL_SEND) -> None:
+    def update(self, sent: HIL_SEND) -> HIL_REC:
         """
         Sends simulated sensor data to the PX4 flight stack.
 
         Args:
             sent: The HIL_SEND container with active update flags.
-        """
-        self.interface.send(sent)
-
-    def get_outputs(self) -> HIL_REC:
-        """
-        Provides thread-safe access to the latest autopilot state.
-
         Returns:
             HIL_REC: A snapshot of the current actuators and status.
         """
+        self.interface.send(sent)
+
         with self._lock:
             return self.state.model_copy()
+
+    # def get_outputs(self) -> HIL_REC:
+    #     """
+    #     Provides thread-safe access to the latest autopilot state.
+
+    #     Returns:
+    #         HIL_REC: A snapshot of the current actuators and status.
+    #     """
+    #     with self._lock:
+    #         return self.state.model_copy()
 
 # main, for testing #
 def main():

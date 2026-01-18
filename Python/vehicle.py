@@ -10,6 +10,7 @@ import threading
 import time
 import utm
 import geopy.distance
+import random
 
 class Packet(BaseModel):
     """
@@ -404,8 +405,11 @@ class Converter(BaseModel):
         """
         pass
 
-    _data: Packet
-    
+    data: Packet
+
+    def crandom(sigma: float):
+        return random().gauss(0, sigma)
+
     def update(self, state: HIL_VEHICLE_STATE):
         """
         Base update method. 
@@ -420,8 +424,6 @@ class Sensor(Converter):
     """
     Subclass of converter used for HIL_SENSOR
     """
-    _updated: HIL_SENSOR_UPDATE_FLAG = HIL_SENSOR_UPDATE_FLAG.RESET
-
     # Override #
     def update(self, state: HIL_VEHICLE_STATE) -> HIL_SENSOR_UPDATE_FLAG:
         """
@@ -443,20 +445,35 @@ class Magnatometer(Sensor):
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         X, Y, Z = self.Index.X, self.Index.Y, self.Index.Z
-        self.updated = 0
+
+        mag_earth_n = 0.22
+        mag_earth_e = 0.0
+        mag_earth_d = 0.41 
+    
+        R = vehicle_data.dcm.matrix
+
+        mag_body_x = (R[0][0] * mag_earth_n) + (R[0][1] * mag_earth_e) + (R[0][2] * mag_earth_d)
+        mag_body_y = (R[1][0] * mag_earth_n) + (R[1][1] * mag_earth_e) + (R[1][2] * mag_earth_d)
+        mag_body_z = (R[2][0] * mag_earth_n) + (R[2][1] * mag_earth_e) + (R[2][2] * mag_earth_d)
+
+        sigma = 0.005
+
         new_data = [
-            # Somehow get magnetic field from vehicle state
+            mag_body_x + self.crandom(sigma),
+            mag_body_y + self.crandom(sigma),
+            mag_body_z + self.crandom(sigma)
         ]
+
         if self.data[X] != new_data[X]:
-            updated += HIL_SENSOR_UPDATE_FLAG.XMAG
+            _updated += HIL_SENSOR_UPDATE_FLAG.XMAG
         if self.data[Y] != new_data[Y]:
-            updated += HIL_SENSOR_UPDATE_FLAG.YMAG
+            _updated += HIL_SENSOR_UPDATE_FLAG.YMAG
         if self.data[Z] != new_data[Z]:
-            updated += HIL_SENSOR_UPDATE_FLAG.ZMAG
+            _updated += HIL_SENSOR_UPDATE_FLAG.ZMAG
 
         self.data = new_data
         
-        return updated
+        return _updated
 
 class Accelerometer(Sensor):
     class Index(IntEnum):
@@ -471,22 +488,39 @@ class Accelerometer(Sensor):
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         X, Y, Z = self.Index.X, self.Index.Y, self.Index.Z
-        # Add noise here #
+        GRAVITY_MSS = 9.80665
+        
+        accel_kinematic_x = vehicle_data.states.body_frame_a.U_dot
+        accel_kinematic_y = vehicle_data.states.body_frame_a.V_dot
+        accel_kinematic_z = vehicle_data.states.body_frame_a.W_dot
+
+        R = vehicle_data.dcm.matrix
+        
+        grav_body_x = R[0][2] * GRAVITY_MSS
+        grav_body_y = R[1][2] * GRAVITY_MSS
+        grav_body_z = R[2][2] * GRAVITY_MSS
+
+        raw_x = accel_kinematic_x - grav_body_x
+        raw_y = accel_kinematic_y - grav_body_y
+        raw_z = accel_kinematic_z - grav_body_z
+
+        sigma = 0.05
+
         new_data = [
-            vehicle_data.states.body_frame_a.U_dot,
-            vehicle_data.states.body_frame_a.V_dot,
-            vehicle_data.states.body_frame_a.W_dot
+            raw_x + self.crandom(sigma),
+            raw_y + self.crandom(sigma),
+            raw_z + self.crandom(sigma)
         ]
         if self.data[X] != new_data[X]:
-            updated += HIL_SENSOR_UPDATE_FLAG.XACC
+            _updated += HIL_SENSOR_UPDATE_FLAG.XACC
         if self.data[Y] != new_data[Y]:
-            updated += HIL_SENSOR_UPDATE_FLAG.YACC
+            _updated += HIL_SENSOR_UPDATE_FLAG.YACC
         if self.data[Z] != new_data[Z]:
-            updated += HIL_SENSOR_UPDATE_FLAG.ZACC
+            _updated += HIL_SENSOR_UPDATE_FLAG.ZACC
 
         self.data = new_data
         
-        return updated
+        return _updated
 
 class Gyro(Sensor):
     class Index(IntEnum):
@@ -501,21 +535,24 @@ class Gyro(Sensor):
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         P, Q, R = self.Index.P, self.Index.Q, self.Index.R
+
+        sigma = 0.002
+
         new_data = [
-            vehicle_data.states.body_frame_al.p_dot,
-            vehicle_data.states.body_frame_al.q_dot,
-            vehicle_data.states.body_frame_al.r_dot
+            vehicle_data.states.body_frame_w.p + self.crandom(sigma),
+            vehicle_data.states.body_frame_w.q + self.crandom(sigma),
+            vehicle_data.states.body_frame_w.r + self.crandom(sigma)
         ]
         if self.data[P] != new_data[P]:
-            updated += HIL_SENSOR_UPDATE_FLAG.XGYRO
+            _updated += HIL_SENSOR_UPDATE_FLAG.XGYRO
         if self.data[Q] != new_data[Q]:
-            updated += HIL_SENSOR_UPDATE_FLAG.YGYRO
+            _updated += HIL_SENSOR_UPDATE_FLAG.YGYRO
         if self.data[R] != new_data[R]:
-            updated += HIL_SENSOR_UPDATE_FLAG.ZGYRO
+            _updated += HIL_SENSOR_UPDATE_FLAG.ZGYRO
 
         self.data = new_data
         
-        return updated
+        return _updated
 
 class Barometer(Sensor):
     class Index(IntEnum):
@@ -536,15 +573,15 @@ class Barometer(Sensor):
             vehicle_data.env.temp_C
         ]
         if self.data[AP] != new_data[AP]:
-            updated += HIL_SENSOR_UPDATE_FLAG.ABS_PRESSURE
+            _updated += HIL_SENSOR_UPDATE_FLAG.ABS_PRESSURE
         if self.data[ALT] != new_data[ALT]:
-            updated += HIL_SENSOR_UPDATE_FLAG.PRESSURE_ALT
+            _updated += HIL_SENSOR_UPDATE_FLAG.PRESSURE_ALT
         if self.data[T] != new_data[T]:
-            updated += HIL_SENSOR_UPDATE_FLAG.TEMPERATURE
+            _updated += HIL_SENSOR_UPDATE_FLAG.TEMPERATURE
 
         self.data = new_data
         
-        return updated
+        return _updated
 
 class Airspeed(Sensor):
     class Index(IntEnum):
@@ -555,16 +592,38 @@ class Airspeed(Sensor):
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         AS = self.Index.AS
-        airspeed = vehicle_data.states.body_frame_v
+        u_vel = vehicle_data.states.body_frame_v.U
+        v_vel = vehicle_data.states.body_frame_v.V
+        w_vel = vehicle_data.states.body_frame_v.W
+
+        true_airspeed_ms = math.sqrt(u_vel**2 + v_vel**2 + w_vel**2)
+        R_SPECIFIC_AIR = 287.058  # J/(kg*K)
+        INHG_TO_PA = 3386.39
+        
+        pressure_inHg = vehicle_data.env.pressure_inHg
+        temp_c = vehicle_data.env.temp_C
+
+        pressure_pa = pressure_inHg * INHG_TO_PA
+        temp_kelvin = temp_c + 273.15
+
+        if temp_kelvin > 0:
+            rho = pressure_pa / (R_SPECIFIC_AIR * temp_kelvin)
+        else:
+            rho = 1.225 # Standard sea level density fallback
+
+        diff_pressure_pa = 0.5 * rho * (true_airspeed_ms ** 2)
+
+        sigma = 2.0
+
         new_data = [
-            # TODO, use DCM to determine track and thus airspeed, then derive pressure difference
+            max(0.0, diff_pressure_pa + self.crandom(sigma))
         ]
         if self.data[AS] != new_data[AS]:
-            updated += HIL_SENSOR_UPDATE_FLAG.DIFF_PRESSURE
+            _updated += HIL_SENSOR_UPDATE_FLAG.DIFF_PRESSURE
 
         self.data = new_data
         
-        return updated
+        return _updated
 
 class Gps(Converter):
     class Index(IntEnum):
@@ -607,8 +666,40 @@ class Gps(Converter):
     def sats_vis(self): return self.data[11]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        state = vehicle_data.states
+        pos = vehicle_data.pos
+        
+        v_north = state.earth_frame_v.Vxe
+        v_east = state.earth_frame_v.Vye
+        v_down = state.earth_frame_v.Vze
+        
+        ground_speed = math.sqrt(v_north**2 + v_east**2)
+        
+        cog_rad = math.atan2(v_east, v_north) 
+        cog_deg = math.degrees(cog_rad)
+        
+        if cog_deg < 0:
+            cog_deg += 360.0
+
+        noise_pos_m = 0.5
+        noise_pos_e7 = int((noise_pos_m / 0.0111) * self.crandom(0.2))
+
+        fix = GPS_FIX_TYPE.FIX_3D
+
+        sats = 12 + random.randint(-1, 1)
         self.data = [
-            # TODO, write logic to assign gps values from states
+            fix,
+            pos.coordinates.lat_degE7 + noise_pos_e7,
+            pos.coordinates.lon_degE7 + noise_pos_e7,
+            pos.altitude.alt_mm + int(noise_pos_m * 1000),
+            1.2,    # TODO, wtf is this
+            1.5,    # TODO, wtf is this
+            ground_speed + random.gauss(0, 0.1),
+            v_north + random.gauss(0, 0.1),
+            v_east + random.gauss(0, 0.1),
+            v_down + random.gauss(0, 0.1),
+            cog_deg + self.crandom(0.1),
+            sats
         ]
 
 class Quaternion(Converter):
@@ -666,8 +757,57 @@ class Quaternion(Converter):
     def zacc(self): return self.data[17]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
+        roll = vehicle_data.states.euler_angles.Phi
+        pitch = vehicle_data.states.euler_angles.Theta
+        yaw = vehicle_data.states.euler_angles.Psi
+
+        cy = math.cos(yaw * 0.5)
+        sy = math.sin(yaw * 0.5)
+        cp = math.cos(pitch * 0.5)
+        sp = math.sin(pitch * 0.5)
+        cr = math.cos(roll * 0.5)
+        sr = math.sin(roll * 0.5)
+
+        q_w = cr * cp * cy + sr * sp * sy
+        q_x = sr * cp * cy - cr * sp * sy
+        q_y = cr * sp * cy + sr * cp * sy
+        q_z = cr * cp * sy - sr * sp * cy
+
+        p = vehicle_data.states.body_frame_w.p
+        q = vehicle_data.states.body_frame_w.q
+        r = vehicle_data.states.body_frame_w.r
+
+        v_north = vehicle_data.states.earth_frame_v.Vxe
+        v_east = vehicle_data.states.earth_frame_v.Vye
+        v_down = vehicle_data.states.earth_frame_v.Vze
+        
+        u = vehicle_data.states.body_frame_v.U
+        v = vehicle_data.states.body_frame_v.V
+        w = vehicle_data.states.body_frame_v.W
+        tas = math.sqrt(u**2 + v**2 + w**2)
+
+        p_current = vehicle_data.env.pressure_inHg * 3386.39
+        p_sea_level = 101325.0
+        ias = tas * math.sqrt(p_current / p_sea_level)
+
+        acc_x = vehicle_data.states.body_frame_a.U_dot
+        acc_y = vehicle_data.states.body_frame_a.V_dot
+        acc_z = vehicle_data.states.body_frame_a.W_dot
+
         self.data = [
-            # TODO, write logic to assign gps values from states
+            q_w, q_x, q_y, q_z,
+            p, q, r,
+            vehicle_data.pos.coordinates.lat_degE7,
+            vehicle_data.pos.coordinates.lon_degE7,
+            vehicle_data.pos.altitude.alt_mm,
+            v_north * 100,
+            v_east * 100,
+            v_down * 100,
+            ias,
+            tas,
+            acc_x * 1000,
+            acc_y * 1000,
+            acc_z * 1000
         ]
 
 class System:
@@ -700,8 +840,9 @@ class System:
         ]
 
         self.flag: HIL_SENSOR_UPDATE_FLAG = HIL_SENSOR_UPDATE_FLAG.RESET
-        self.internal_time: HIL_SYSTEM_TIME = HIL_SYSTEM_TIME()
         self.state: MAV_STATE = MAV_STATE.MAV_STATE_BOOT
+        self.internal_time: HIL_SYSTEM_TIME = HIL_SYSTEM_TIME()
+        self.heartbeat: HIL_HEARTBEAT = HIL_HEARTBEAT()
 
     def start(self):
         # start vehicle #
@@ -748,7 +889,7 @@ class System:
 
     def get_sensor(self) -> HIL_SENSOR:
         """
-        returns updated sensor data in mavlnk format from most recent update
+        returns _updated sensor data in mavlnk format from most recent update
         
         :param self: Description
         :return: Description
@@ -858,6 +999,19 @@ class System:
         :rtype: HIL_SYSTEM_TIME
         """
         return self.internal_time.model_copy()
+    
+    def get_heartbeat(self):
+        """
+        Docstring for get_heartbeat
+        
+        :param self: Description
+        """
+        self.heartbeat.type = MAV_TYPE.MAV_TYPE_VTOL_QUADROTOR
+        self.heartbeat.autopilot = MAV_AUTOPILOT.MAV_AUTOPILOT_PX4
+        self.heartbeat.base_mode =  MAV_MODE_FLAG.CUSTOM_MODE_ENABLED
+        self.heartbeat.system_status = self.state
+
+        return self.heartbeat.model_copy()
 
 
 # main, for testing #

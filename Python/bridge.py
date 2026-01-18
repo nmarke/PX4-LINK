@@ -31,7 +31,7 @@ class Translator:
 
 class Bridge:
     """
-    Docstring for Converter
+    Docstring for Bridge
     """
     def __init__(self):
         """
@@ -48,12 +48,10 @@ class Bridge:
         self.rec: HIL_REC = HIL_REC()
     
         self.rc_inputs: HIL_RC_INPUTS = HIL_RC_INPUTS()
-        self.heartbeat: HIL_HEARTBEAT = HIL_HEARTBEAT()
         self.time: HIL_SYSTEM_TIME = HIL_SYSTEM_TIME()
         self.sys_state: MAV_STATE = MAV_STATE.MAV_STATE_UNINIT
 
         # threading #
-        self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -111,7 +109,7 @@ class Bridge:
             self.time = self.system.get_time()
             # update plant #
             self.sys_state = self.system.update(
-                send=self.send
+                send=self.rec.actuator_controls
                 )
             # recive from plant data (with noise from sensor classes) #
             self.send = Translator.pack(
@@ -119,14 +117,16 @@ class Bridge:
                 gps=self.system.get_gps(),
                 rc_inputs=self.rc_inputs,
                 quat=self.system.get_quaternion(),
-                heartbeat=self.heartbeat,
+                heartbeat=self.system.get_heartbeat(),
                 time=self.time,
                 flag=self._update_flag()
             )
             # send to px4 #
-            self.px4.send_inputs(self.send)
-            # recieve from px4 #
-            self.send = self.px4.get_outputs()
+            self.rec = self.px4.update(self.send)
+
+            # Print debug #
+            print(f"px4 heartbeat:: {self.rec.heartbeat}")
+            print(f"plant heartbeat:: {self.system.get_heartbeat}")
 
     def start(self):
         """
