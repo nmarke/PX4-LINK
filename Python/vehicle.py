@@ -728,7 +728,7 @@ class System:
         :param self: Description
         """
         # update time #
-        current_time = int(time.time * 1e6)
+        current_time = int(time.time * 1e6) # TODO, figure out time units etc
         self.internal_time.time_unix_usec = current_time
         self.internal_time.time_boot_ms = current_time - self._start_time
 

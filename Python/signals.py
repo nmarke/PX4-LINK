@@ -215,7 +215,7 @@ class HIL_ACTUATOR_CTL(MavWrapper):
     """Actuator commands received from the flight controller."""
     time_usec: int = 0
     controls: list[float] = Field(
-        default_factory=lambda: [0.0] * NUM_ACTUATORS, # TODO, find some way to get rid of these magic numbers
+        default_factory=lambda: [0.0] * NUM_ACTUATORS,
         min_length=NUM_ACTUATORS, 
         max_length=NUM_ACTUATORS
     )
