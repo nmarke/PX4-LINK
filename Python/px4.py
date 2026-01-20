@@ -212,7 +212,8 @@ class PX4:
                     if new_data.time:
                         self.state.time = new_data.time
             else:
-                print(f"DEBUG:: Didn't recieve new data, returned {new_data}")
+                pass
+                # print(f"DEBUG:: Didn't recieve new data, returned {new_data}")
 
     def start(self):
         """

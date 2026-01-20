@@ -293,7 +293,7 @@ class Plant:
         #         # ... rest of your unpack and lock logic ...
 
     def start(self) -> bool:
-        timeout_limit: int = 10
+        timeout_limit: int = 25
         self.connected = self.UDP.connect(timeout_limit)
 
         if self.connected:
@@ -405,10 +405,10 @@ class Converter(BaseModel):
         """
         pass
 
-    data: Packet
+    _data: Packet
 
     def crandom(sigma: float):
-        return random().gauss(0, sigma)
+        return random.gauss(0, sigma)
 
     def update(self, state: HIL_VEHICLE_STATE):
         """
@@ -418,7 +418,7 @@ class Converter(BaseModel):
         pass
 
     def read(self) -> Packet:
-        return self.data
+        return self._data
 
 class Sensor(Converter):
     """
@@ -437,11 +437,11 @@ class Magnatometer(Sensor):
         X, Y, Z = 0, 1, 2
 
     @property
-    def x(self): return self.data[0]
+    def x(self): return self._data[0]
     @property
-    def y(self): return self.data[1]
+    def y(self): return self._data[1]
     @property
-    def z(self): return self.data[2]
+    def z(self): return self._data[2]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         X, Y, Z = self.Index.X, self.Index.Y, self.Index.Z
@@ -464,14 +464,14 @@ class Magnatometer(Sensor):
             mag_body_z + self.crandom(sigma)
         ]
 
-        if self.data[X] != new_data[X]:
+        if self._data[X] != new_data[X]:
             _updated += HIL_SENSOR_UPDATE_FLAG.XMAG
-        if self.data[Y] != new_data[Y]:
+        if self._data[Y] != new_data[Y]:
             _updated += HIL_SENSOR_UPDATE_FLAG.YMAG
-        if self.data[Z] != new_data[Z]:
+        if self._data[Z] != new_data[Z]:
             _updated += HIL_SENSOR_UPDATE_FLAG.ZMAG
 
-        self.data = new_data
+        self._data = new_data
         
         return _updated
 
@@ -480,11 +480,11 @@ class Accelerometer(Sensor):
         X, Y, Z = 0, 1, 2
 
     @property
-    def x(self): return self.data[0]
+    def x(self): return self._data[0]
     @property
-    def y(self): return self.data[1]
+    def y(self): return self._data[1]
     @property
-    def z(self): return self.data[2]
+    def z(self): return self._data[2]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         X, Y, Z = self.Index.X, self.Index.Y, self.Index.Z
@@ -511,14 +511,14 @@ class Accelerometer(Sensor):
             raw_y + self.crandom(sigma),
             raw_z + self.crandom(sigma)
         ]
-        if self.data[X] != new_data[X]:
+        if self._data[X] != new_data[X]:
             _updated += HIL_SENSOR_UPDATE_FLAG.XACC
-        if self.data[Y] != new_data[Y]:
+        if self._data[Y] != new_data[Y]:
             _updated += HIL_SENSOR_UPDATE_FLAG.YACC
-        if self.data[Z] != new_data[Z]:
+        if self._data[Z] != new_data[Z]:
             _updated += HIL_SENSOR_UPDATE_FLAG.ZACC
 
-        self.data = new_data
+        self._data = new_data
         
         return _updated
 
@@ -527,11 +527,11 @@ class Gyro(Sensor):
         P, Q, R = 0, 1, 2
 
     @property
-    def p(self): return self.data[0]
+    def p(self): return self._data[0]
     @property
-    def q(self): return self.data[1]
+    def q(self): return self._data[1]
     @property
-    def r(self): return self.data[2]
+    def r(self): return self._data[2]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         P, Q, R = self.Index.P, self.Index.Q, self.Index.R
@@ -543,14 +543,14 @@ class Gyro(Sensor):
             vehicle_data.states.body_frame_w.q + self.crandom(sigma),
             vehicle_data.states.body_frame_w.r + self.crandom(sigma)
         ]
-        if self.data[P] != new_data[P]:
+        if self._data[P] != new_data[P]:
             _updated += HIL_SENSOR_UPDATE_FLAG.XGYRO
-        if self.data[Q] != new_data[Q]:
+        if self._data[Q] != new_data[Q]:
             _updated += HIL_SENSOR_UPDATE_FLAG.YGYRO
-        if self.data[R] != new_data[R]:
+        if self._data[R] != new_data[R]:
             _updated += HIL_SENSOR_UPDATE_FLAG.ZGYRO
 
-        self.data = new_data
+        self._data = new_data
         
         return _updated
 
@@ -559,11 +559,11 @@ class Barometer(Sensor):
         AP, ALT, T = 0, 1, 2
 
     @property
-    def abs_p(self): return self.data[0]
+    def abs_p(self): return self._data[0]
     @property
-    def p_alt(self): return self.data[1]
+    def p_alt(self): return self._data[1]
     @property
-    def temp(self): return self.data[2]
+    def temp(self): return self._data[2]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         AP, ALT, T = self.Index.AP, self.Index.ALT, self.Index.T
@@ -572,14 +572,14 @@ class Barometer(Sensor):
             vehicle_data.pos.altitude.alt_mm / 1e3, # TODO, confrm SI units
             vehicle_data.env.temp_C
         ]
-        if self.data[AP] != new_data[AP]:
+        if self._data[AP] != new_data[AP]:
             _updated += HIL_SENSOR_UPDATE_FLAG.ABS_PRESSURE
-        if self.data[ALT] != new_data[ALT]:
+        if self._data[ALT] != new_data[ALT]:
             _updated += HIL_SENSOR_UPDATE_FLAG.PRESSURE_ALT
-        if self.data[T] != new_data[T]:
+        if self._data[T] != new_data[T]:
             _updated += HIL_SENSOR_UPDATE_FLAG.TEMPERATURE
 
-        self.data = new_data
+        self._data = new_data
         
         return _updated
 
@@ -588,7 +588,7 @@ class Airspeed(Sensor):
         AS = 0
 
     @property
-    def diff_p(self): return self.data[0]
+    def diff_p(self): return self._data[0]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         AS = self.Index.AS
@@ -618,10 +618,10 @@ class Airspeed(Sensor):
         new_data = [
             max(0.0, diff_pressure_pa + self.crandom(sigma))
         ]
-        if self.data[AS] != new_data[AS]:
+        if self._data[AS] != new_data[AS]:
             _updated += HIL_SENSOR_UPDATE_FLAG.DIFF_PRESSURE
 
-        self.data = new_data
+        self._data = new_data
         
         return _updated
 
@@ -641,29 +641,29 @@ class Gps(Converter):
         SV = 11
 
     @property
-    def fix_type(self): return self.data[0]
+    def fix_type(self): return self._data[0]
     @property
-    def lat(self): return self.data[1]
+    def lat(self): return self._data[1]
     @property
-    def lon(self): return self.data[2]
+    def lon(self): return self._data[2]
     @property
-    def alt(self): return self.data[3]
+    def alt(self): return self._data[3]
     @property
-    def eph(self): return self.data[4]
+    def eph(self): return self._data[4]
     @property
-    def epv(self): return self.data[5]
+    def epv(self): return self._data[5]
     @property
-    def vel(self): return self.data[6]
+    def vel(self): return self._data[6]
     @property
-    def vn(self): return self.data[7]
+    def vn(self): return self._data[7]
     @property
-    def ve(self): return self.data[8]
+    def ve(self): return self._data[8]
     @property
-    def vd(self): return self.data[9]
+    def vd(self): return self._data[9]
     @property
-    def cog(self): return self.data[10]
+    def cog(self): return self._data[10]
     @property
-    def sats_vis(self): return self.data[11]
+    def sats_vis(self): return self._data[11]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         state = vehicle_data.states
@@ -687,7 +687,7 @@ class Gps(Converter):
         fix = GPS_FIX_TYPE.FIX_3D
 
         sats = 12 + random.randint(-1, 1)
-        self.data = [
+        self._data = [
             fix,
             pos.coordinates.lat_degE7 + noise_pos_e7,
             pos.coordinates.lon_degE7 + noise_pos_e7,
@@ -722,39 +722,39 @@ class Quaternion(Converter):
 
     @property
     def attitude_quaternion(self):
-        return [self.data[0],
-                self.data[1],
-                self.data[2],
-                self.data[3]]
+        return [self._data[0],
+                self._data[1],
+                self._data[2],
+                self._data[3]]
         pass
     @property
-    def rollspeed(self): return self.data[4]
+    def rollspeed(self): return self._data[4]
     @property
-    def pitchspeed(self): return self.data[5]
+    def pitchspeed(self): return self._data[5]
     @property
-    def yawspeed(self): return self.data[6]
+    def yawspeed(self): return self._data[6]
     @property
-    def lat(self): return self.data[7]
+    def lat(self): return self._data[7]
     @property
-    def lon(self): return self.data[8]
+    def lon(self): return self._data[8]
     @property
-    def alt(self): return self.data[9]
+    def alt(self): return self._data[9]
     @property
-    def vx(self): return self.data[10]
+    def vx(self): return self._data[10]
     @property
-    def vy(self): return self.data[11]
+    def vy(self): return self._data[11]
     @property
-    def vz(self): return self.data[12]
+    def vz(self): return self._data[12]
     @property
-    def ind_airspeed(self): return self.data[13]
+    def ind_airspeed(self): return self._data[13]
     @property
-    def tru_airspeed(self): return self.data[14]
+    def tru_airspeed(self): return self._data[14]
     @property
-    def xacc(self): return self.data[15]
+    def xacc(self): return self._data[15]
     @property
-    def yacc(self): return self.data[16]
+    def yacc(self): return self._data[16]
     @property
-    def zacc(self): return self.data[17]
+    def zacc(self): return self._data[17]
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         roll = vehicle_data.states.euler_angles.Phi
@@ -794,7 +794,7 @@ class Quaternion(Converter):
         acc_y = vehicle_data.states.body_frame_a.V_dot
         acc_z = vehicle_data.states.body_frame_a.W_dot
 
-        self.data = [
+        self._data = [
             q_w, q_x, q_y, q_z,
             p, q, r,
             vehicle_data.pos.coordinates.lat_degE7,
@@ -844,7 +844,7 @@ class System:
         self.internal_time: HIL_SYSTEM_TIME = HIL_SYSTEM_TIME()
         self.heartbeat: HIL_HEARTBEAT = HIL_HEARTBEAT()
 
-    def start(self):
+    def start(self) -> bool:
         # start vehicle #
         started = self.vehicle.vehicle_start()
 
@@ -855,6 +855,8 @@ class System:
             self._start_time: int = int(time.time() * 1e-6)
         else:
             self.state = MAV_STATE.MAV_STATE_CRITICAL
+
+        return started
 
     def stop(self):
         self.state = MAV_STATE.MAV_STATE_POWEROFF
@@ -869,7 +871,7 @@ class System:
         :param self: Description
         """
         # update time #
-        current_time = int(time.time * 1e6) # TODO, figure out time units etc
+        current_time = int(time.time() * 1e6) # TODO, figure out time units etc
         self.internal_time.time_unix_usec = current_time
         self.internal_time.time_boot_ms = current_time - self._start_time
 

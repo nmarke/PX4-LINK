@@ -101,32 +101,33 @@ class Bridge:
         """
         used to time sending and recieving packets to PX4
         """
-        self.system.start()
-        self.px4.start()
-    
-        while not self._stop_event.is_set():
-            # update time #
-            self.time = self.system.get_time()
-            # update plant #
-            self.sys_state = self.system.update(
-                send=self.rec.actuator_controls
-                )
-            # recive from plant data (with noise from sensor classes) #
-            self.send = Translator.pack(
-                sensor=self.system.get_sensor(),
-                gps=self.system.get_gps(),
-                rc_inputs=self.rc_inputs,
-                quat=self.system.get_quaternion(),
-                heartbeat=self.system.get_heartbeat(),
-                time=self.time,
-                flag=self._update_flag()
-            )
-            # send to px4 #
-            self.rec = self.px4.update(self.send)
+        if self.system.start():
+            self.px4.start()
+            print("DEBUG:: Started PX4")
+        
+            while not self._stop_event.is_set():
+                # update time #
+                self.time = self.system.get_time()
+                # update plant #
+                self.sys_state = self.system.update(
+                    send=self.rec.actuator_controls
+                    )
+                # recive from plant data (with noise from sensor classes) #
+                self.rec = self.px4.update(
+                    Translator.pack(
+                        sensor=self.system.get_sensor(),
+                        gps=self.system.get_gps(),
+                        rc_inputs=self.rc_inputs,
+                        quat=self.system.get_quaternion(),
+                        heartbeat=self.system.get_heartbeat(),
+                        time=self.time,
+                        flag=self._update_flag()
+                        )
+                    )
 
-            # Print debug #
-            print(f"px4 heartbeat:: {self.rec.heartbeat}")
-            print(f"plant heartbeat:: {self.system.get_heartbeat}")
+                # Print debug #
+                print(f"px4 heartbeat:: {self.rec.heartbeat}")
+                print(f"plant heartbeat:: {self.system.get_heartbeat}")
 
     def start(self):
         """
