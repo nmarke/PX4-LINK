@@ -82,6 +82,7 @@ class MavlinkInterface(BaseModel):
                 send.sensor.abs_pressure, send.sensor.diff_pressure, send.sensor.pressure_alt,
                 send.sensor.temp, send.sensor.fields_updated, 0
             )
+            print("DEBUG:: Sent Sensor")
 
         # --- HIL GPS UPDATE ---
         if send.flag & HIL_SEND_UPDATE_FLAG.GPS:
@@ -91,6 +92,7 @@ class MavlinkInterface(BaseModel):
                 send.gps.vn_cms, send.gps.ve_cms, send.gps.vd_cms, send.gps.cog,
                 send.gps.satellites_visible, 0, 0
             )
+            print("DEBUG:: Sent GPS")
 
         # --- HIL RC INPUTS UPDATE ---
         if send.flag & HIL_SEND_UPDATE_FLAG.RC:
@@ -104,6 +106,7 @@ class MavlinkInterface(BaseModel):
                 send.rc_inputs.chan11_raw, send.rc_inputs.chan12_raw,
                 send.rc_inputs.rssi
             )
+            print("DEBUG:: Sent Inputs")
 
         # --- HIL QUATERNION UPDATE ---
         if send.flag & HIL_SEND_UPDATE_FLAG.QUAT:
@@ -115,12 +118,14 @@ class MavlinkInterface(BaseModel):
                 send.quat.ind_airspeed_cms, send.quat.true_airspeed_cms,
                 send.quat.xacc_mG, send.quat.yacc_mG, send.quat.zacc_mG
             )
+            print("DEBUG:: Sent Quaternion")
 
         # --- SYSTEM TIME UPDATE ---
         if send.flag & HIL_SEND_UPDATE_FLAG.TIME:
             self._vehicle.mav.system_time_send(
                 send.time.time_unix_usec, send.time.time_boot_ms
             )
+            print("DEBUG:: Sent Time")
 
         # --- HEARTBEAT UPDATE ---
         if send.flag & HIL_SEND_UPDATE_FLAG.HEARTBEAT:
@@ -129,6 +134,7 @@ class MavlinkInterface(BaseModel):
                 send.heartbeat.base_mode, send.heartbeat.custom_mode,
                 send.heartbeat.system_status, send.heartbeat.mavlink_version
             )
+            print("DEBUG:: Sent Heartbeat")
 
     def recieve(self) -> HIL_REC:
         """

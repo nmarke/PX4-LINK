@@ -8,9 +8,9 @@ import socket
 import struct
 import threading
 import time
-import utm
 import geopy.distance
 import random
+from typing import Any
 
 class Packet(BaseModel):
     """
@@ -99,6 +99,7 @@ class UDPInterface(NetworkInterface):
             # Determine count based on 8-byte double width
             num_doubles = len(rec_bytes) // 8
             unpacked_data = struct.unpack(f'<{num_doubles}d', rec_bytes)
+            print(f"Number of doubles:: {num_doubles}")
             return Packet(data_string=unpacked_data)
             
         except socket.timeout:
@@ -313,16 +314,22 @@ class Plant:
         self.UDP.disconnect()
 
     def get_data(self, send: HIL_ACTUATOR_CTL) -> tuple[STATES, DCM]:
-        if self.UDP.send(Translator.pack(send)):
-            print(f"DEBUG:: Sent {send}")
-        else:
-            print(f"DEBUG:: Failed to send {send}")
+        # if self.UDP.send(Translator.pack(send)):
+        #     print(f"DEBUG:: Sent {send}")
+        # else:
+        #     print(f"DEBUG:: Failed to send {send}")
 
-        with self._lock:
-            return(
-                self.STATES,
-                self.DCM
-            )
+        # with self._lock:
+        #     return(
+        #         self.STATES,
+        #         self.DCM
+        #     )
+
+        # TODO, TESTING
+        return(
+            STATES(),
+            DCM()
+        )
 
 class Vehicle:
     """
@@ -348,9 +355,13 @@ class Vehicle:
         self.env.temp_C = self._start_temp_degC
         self.env.pressure_inHg = self._start_pressure_inHg
 
+        # TESTING
+        return True
         return self.plant.start()
 
     def vehicle_stop(self):
+        # TESTING
+        return None
         self.plant.stop()
 
     def _update_position(self):
@@ -372,7 +383,7 @@ class Vehicle:
 
     def _update_altitude(self):
         # update altitude, Ze (m) altitude (mm)
-        self.pos.altitude = self._start_alt_mm - self.states.earth_frame_x.Ze * 1e3
+        self.pos.altitude.alt_mm = self._start_alt_mm - self.states.earth_frame_x.Ze * 1e3
 
     def _update_enviornment(self):
         # approx 1 in hg per 1000 ft #
@@ -405,9 +416,9 @@ class Converter(BaseModel):
         """
         pass
 
-    _data: Packet
+    _data: Packet = PrivateAttr()
 
-    def crandom(sigma: float):
+    def crandom(self, sigma: float):
         return random.gauss(0, sigma)
 
     def update(self, state: HIL_VEHICLE_STATE):
@@ -419,11 +430,19 @@ class Converter(BaseModel):
 
     def read(self) -> Packet:
         return self._data
+    
+    def model_post_init(self, __context: Any) -> None:
+        """
+        This runs after the instance is initialized.
+        """
+        size = len(self.Index)
+        self._data = Packet(data_string=[0.0] * size)
 
 class Sensor(Converter):
     """
     Subclass of converter used for HIL_SENSOR
     """
+    _updated: HIL_SENSOR_UPDATE_FLAG = 0
     # Override #
     def update(self, state: HIL_VEHICLE_STATE) -> HIL_SENSOR_UPDATE_FLAG:
         """
@@ -465,15 +484,15 @@ class Magnatometer(Sensor):
         ]
 
         if self._data[X] != new_data[X]:
-            _updated += HIL_SENSOR_UPDATE_FLAG.XMAG
+            self._updated += HIL_SENSOR_UPDATE_FLAG.XMAG
         if self._data[Y] != new_data[Y]:
-            _updated += HIL_SENSOR_UPDATE_FLAG.YMAG
+            self._updated += HIL_SENSOR_UPDATE_FLAG.YMAG
         if self._data[Z] != new_data[Z]:
-            _updated += HIL_SENSOR_UPDATE_FLAG.ZMAG
+            self._updated += HIL_SENSOR_UPDATE_FLAG.ZMAG
 
         self._data = new_data
         
-        return _updated
+        return self._updated
 
 class Accelerometer(Sensor):
     class Index(IntEnum):
@@ -512,15 +531,15 @@ class Accelerometer(Sensor):
             raw_z + self.crandom(sigma)
         ]
         if self._data[X] != new_data[X]:
-            _updated += HIL_SENSOR_UPDATE_FLAG.XACC
+            self._updated += HIL_SENSOR_UPDATE_FLAG.XACC
         if self._data[Y] != new_data[Y]:
-            _updated += HIL_SENSOR_UPDATE_FLAG.YACC
+            self._updated += HIL_SENSOR_UPDATE_FLAG.YACC
         if self._data[Z] != new_data[Z]:
-            _updated += HIL_SENSOR_UPDATE_FLAG.ZACC
+            self._updated += HIL_SENSOR_UPDATE_FLAG.ZACC
 
         self._data = new_data
         
-        return _updated
+        return self._updated
 
 class Gyro(Sensor):
     class Index(IntEnum):
@@ -544,15 +563,15 @@ class Gyro(Sensor):
             vehicle_data.states.body_frame_w.r + self.crandom(sigma)
         ]
         if self._data[P] != new_data[P]:
-            _updated += HIL_SENSOR_UPDATE_FLAG.XGYRO
+            self._updated += HIL_SENSOR_UPDATE_FLAG.XGYRO
         if self._data[Q] != new_data[Q]:
-            _updated += HIL_SENSOR_UPDATE_FLAG.YGYRO
+            self._updated += HIL_SENSOR_UPDATE_FLAG.YGYRO
         if self._data[R] != new_data[R]:
-            _updated += HIL_SENSOR_UPDATE_FLAG.ZGYRO
+            self._updated += HIL_SENSOR_UPDATE_FLAG.ZGYRO
 
         self._data = new_data
         
-        return _updated
+        return self._updated
 
 class Barometer(Sensor):
     class Index(IntEnum):
@@ -569,19 +588,19 @@ class Barometer(Sensor):
         AP, ALT, T = self.Index.AP, self.Index.ALT, self.Index.T
         new_data = [
             vehicle_data.env.pressure_inHg,
-            vehicle_data.pos.altitude.alt_mm / 1e3, # TODO, confrm SI units
+            float(vehicle_data.pos.altitude.alt_mm) / 1e3, # TODO, confrm SI units
             vehicle_data.env.temp_C
         ]
         if self._data[AP] != new_data[AP]:
-            _updated += HIL_SENSOR_UPDATE_FLAG.ABS_PRESSURE
+            self._updated += HIL_SENSOR_UPDATE_FLAG.ABS_PRESSURE
         if self._data[ALT] != new_data[ALT]:
-            _updated += HIL_SENSOR_UPDATE_FLAG.PRESSURE_ALT
+            self._updated += HIL_SENSOR_UPDATE_FLAG.PRESSURE_ALT
         if self._data[T] != new_data[T]:
-            _updated += HIL_SENSOR_UPDATE_FLAG.TEMPERATURE
+            self._updated += HIL_SENSOR_UPDATE_FLAG.TEMPERATURE
 
         self._data = new_data
         
-        return _updated
+        return self._updated
 
 class Airspeed(Sensor):
     class Index(IntEnum):
@@ -619,11 +638,11 @@ class Airspeed(Sensor):
             max(0.0, diff_pressure_pa + self.crandom(sigma))
         ]
         if self._data[AS] != new_data[AS]:
-            _updated += HIL_SENSOR_UPDATE_FLAG.DIFF_PRESSURE
+            self._updated += HIL_SENSOR_UPDATE_FLAG.DIFF_PRESSURE
 
         self._data = new_data
         
-        return _updated
+        return self._updated
 
 class Gps(Converter):
     class Index(IntEnum):
@@ -643,27 +662,27 @@ class Gps(Converter):
     @property
     def fix_type(self): return self._data[0]
     @property
-    def lat(self): return self._data[1]
+    def lat(self): return int(self._data[1])
     @property
-    def lon(self): return self._data[2]
+    def lon(self): return int(self._data[2])
     @property
-    def alt(self): return self._data[3]
+    def alt(self): return int(self._data[3])
     @property
-    def eph(self): return self._data[4]
+    def eph(self): return int(self._data[4])
     @property
-    def epv(self): return self._data[5]
+    def epv(self): return int(self._data[5])
     @property
-    def vel(self): return self._data[6]
+    def vel(self): return int(self._data[6])
     @property
-    def vn(self): return self._data[7]
+    def vn(self): return int(self._data[7])
     @property
-    def ve(self): return self._data[8]
+    def ve(self): return int(self._data[8])
     @property
-    def vd(self): return self._data[9]
+    def vd(self): return int(self._data[9])
     @property
-    def cog(self): return self._data[10]
+    def cog(self): return int(self._data[10])
     @property
-    def sats_vis(self): return self._data[11]
+    def sats_vis(self): return int(self._data[11])
 
     def update(self, vehicle_data: HIL_VEHICLE_STATE):
         state = vehicle_data.states
@@ -884,7 +903,7 @@ class System:
 
         # update components #
         for converter in self.converters:
-            converter.update()
+            converter.update(state)
 
         # return state #
         return self.state
@@ -910,17 +929,17 @@ class System:
             yacc=accel.y,
             zacc=accel.z,
 
-            xgyro=gyro.x,
-            ygyro=gyro.y,
-            zgyro=gyro.z,
+            xgyro=gyro.p,
+            ygyro=gyro.q,
+            zgyro=gyro.r,
 
             xmag=mag.x,
             ymag=mag.y,
             zmag=mag.z,
 
-            abs_pressure=baro.abs_pressure,
-            diff_pressure=airspd.diff_pressure,
-            pressure_alt=baro.pressure_alt,
+            abs_pressure=baro.abs_p,
+            diff_pressure=airspd.diff_p,
+            pressure_alt=baro.p_alt,
             temp=baro.temp,
 
             fields_updated=self.flag

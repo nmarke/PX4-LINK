@@ -22,6 +22,7 @@ def main():
                 thread.join()
             bridge.stop()
         elif command == "exit":
+            bridge.stop()
             break
         else:
             print("Unrecognized command")

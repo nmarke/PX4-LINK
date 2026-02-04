@@ -6,6 +6,7 @@ from vehicle import System
 from px4 import PX4
 from signals import *
 import threading
+import time
 
 class Translator:
     """
@@ -106,6 +107,7 @@ class Bridge:
             print("DEBUG:: Started PX4")
         
             while not self._stop_event.is_set():
+                start = time.time()
                 # update time #
                 self.time = self.system.get_time()
                 # update plant #
@@ -124,10 +126,12 @@ class Bridge:
                         flag=self._update_flag()
                         )
                     )
+                
+                time.sleep(abs(1E-4 - (time.time() - start))) # 100 us
 
                 # Print debug #
-                print(f"px4 heartbeat:: {self.rec.heartbeat}")
-                print(f"plant heartbeat:: {self.system.get_heartbeat}")
+                # print(f"px4 heartbeat:: {self.rec.heartbeat}")
+                # print(f"plant heartbeat:: {self.system.get_heartbeat}")
 
     def start(self):
         """
@@ -150,3 +154,14 @@ class Bridge:
         if self._thread:
             self._thread.join()
         print(f"DEBUG:: Bridge stopped")
+
+
+# for testing #
+def main():
+    bridge: Bridge = Bridge()
+
+    bridge.start()
+
+
+if __name__ == "__main__":
+    main()
